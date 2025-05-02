@@ -48,9 +48,10 @@ Create a complete meal plan with daily breakdowns for each meal.
 
     res.json({ mealPlan: completion.choices[0].message.content });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Meal plan generation failed' });
-  }
+  console.error("OpenAI Error:", err.response?.data || err.message || err);
+  res.status(500).json({ error: err.message || 'Meal plan generation failed' });
+}
+
 });
 
 const PORT = process.env.PORT || 3001;
