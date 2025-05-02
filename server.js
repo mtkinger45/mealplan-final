@@ -42,7 +42,7 @@ Create a complete meal plan with daily breakdowns for each meal.
 
   try {
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
+      model: 'gpt-4-turbo',
       messages: [{ role: 'user', content: prompt }],
     });
 
