@@ -1,98 +1,41 @@
 import express from 'express';
-import cors from 'cors';
 import bodyParser from 'body-parser';
-import { OpenAI } from 'openai';
-import { PDFDocument, StandardFonts } from 'pdf-lib';
+import cors from 'cors';
+import { createPdfFromText } from './pdfUtils.js';
 
 const app = express();
-const port = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(bodyParser.json());
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+app.use(bodyParser.json({ limit: '10mb' }));
 
 app.post('/api/mealplan', async (req, res) => {
-  try {
-    const { feedback, ...userData } = req.body;
+  const { name, meals, duration, calendarInsights } = req.body;
 
-    const prompt = feedback
-      ? `Update this meal plan based on the user's feedback.
-
-User feedback: ${feedback}
-
-Original Request:
-${JSON.stringify(userData, null, 2)}
-
-Make sure to label each day using real weekdays (e.g., Monday, Tuesday). Use 'calendarInsights' to match busy days with quicker meals.`
-      : `Create a personalized meal plan based on the user's input:
-${JSON.stringify(userData, null, 2)}
-
-Make sure to label each day using real weekdays (e.g., Monday, Tuesday). Use 'calendarInsights' to match busy days with quicker meals.`;
-
-    const chat = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [
-        { role: 'system', content: 'You are a meal planning assistant. Always label the days using weekdays (e.g., Monday, Tuesday) and adjust meal difficulty based on calendarInsights.' },
-        { role: 'user', content: prompt }
-      ]
-    });
-
-    const mealPlan = chat.choices[0].message.content;
-    res.json({ mealPlan });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Meal plan generation failed' });
+  // Simulated plan creation based on calendar
+  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const startDay = new Date().getDay();
+  const plan = [];
+  for (let i = 0; i < Number(duration || 7); i++) {
+    const dayName = days[(startDay + i) % 7];
+    const busy = calendarInsights?.toLowerCase().includes(dayName.toLowerCase());
+    plan.push(`${dayName}: ${meals.includes('Supper') ? (busy ? 'Quick meal' : 'Balanced meal') : '—'}`);
   }
+  res.json({ mealPlan: `Meal Plan for ${name}\n\n` + plan.join('\n') });
 });
-
-async function generatePdfBuffer(content, title) {
-  const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage();
-  const { width, height } = page.getSize();
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const fontSize = 12;
-
-  const lines = content.match(/.{1,90}/g) || [content];
-  let y = height - 50;
-
-  page.drawText(`${title}`, { x: 50, y, size: 16, font });
-  y -= 30;
-
-  for (const line of lines) {
-    if (y < 50) break;
-    page.drawText(line, { x: 50, y, size: fontSize, font });
-    y -= 20;
-  }
-
-  return await pdfDoc.save();
-}
 
 app.post('/api/finalize', async (req, res) => {
+  const { name, mealPlan } = req.body;
   try {
-    const { name, mealPlan } = req.body;
-    const recipes = `Recipes for ${name}
+    const planPdf = await createPdfFromText(`Meal Plan for ${name}\n\n${mealPlan}`);
+    const recipesPdf = await createPdfFromText(`Recipes for ${name}\n\nRecipes coming soon...`);
+    const shoppingPdf = await createPdfFromText(`Shopping List for ${name}\n\nList coming soon...`);
 
-${mealPlan?.split('Day').slice(0, 2).join('Day') || 'Recipes coming soon...'}`;
-    const shopping = `Shopping list based on meal plan
-
-${mealPlan?.split('\n').slice(0, 10).join('\n') || 'List coming soon...'}`;
-
-    const planPdf = await generatePdfBuffer(mealPlan, `Meal Plan for ${name}`);
-    const recipesPdf = await generatePdfBuffer(recipes, `Recipes for ${name}`);
-    const shoppingPdf = await generatePdfBuffer(shopping, `Shopping List for ${name}`);
-
-    res.json({
-      planPdf: planPdf.toString('base64'),
-      recipesPdf: recipesPdf.toString('base64'),
-      shoppingPdf: shoppingPdf.toString('base64')
-    });
+    res.json({ planPdf, recipesPdf, shoppingPdf });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'PDF generation failed' });
+    console.error('PDF generation error:', err);
+    res.status(500).json({ error: 'Failed to generate PDFs' });
   }
 });
 
-app.listen(port, () => {
-  console.log(`Meal Plan API listening at http://localhost:${port}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
