@@ -3,8 +3,6 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import { OpenAI } from 'openai';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
-import fetch from 'node-fetch';
-import FormData from 'form-data';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -48,7 +46,7 @@ Make sure to label each day using real weekdays (e.g., Monday, Tuesday). Use 'ca
   }
 });
 
-async function generatePdf(content, title) {
+async function generatePdfBuffer(content, title) {
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage();
   const { width, height } = page.getSize();
@@ -67,30 +65,8 @@ async function generatePdf(content, title) {
     y -= 20;
   }
 
-  const pdfBytes = await pdfDoc.save();
-
-  const formData = new FormData();
-  formData.append('file', Buffer.from(pdfBytes), {
-    filename: `${title}.pdf`,
-    contentType: 'application/pdf'
-  });
-
-  const uploadRes = await fetch('https://file.io/?expires=1d', {
-    method: 'POST',
-    body: formData,
-    headers: formData.getHeaders?.() || {}
-  });
-
-  const uploadJson = await uploadRes.json();
-
-  if (!uploadJson.success) {
-    console.error('File upload failed:', uploadJson);
-    throw new Error('Failed to upload PDF');
-  }
-
-  return uploadJson.link;
+  return await pdfDoc.save();
 }
-
 
 app.post('/api/finalize', async (req, res) => {
   try {
@@ -98,11 +74,15 @@ app.post('/api/finalize', async (req, res) => {
     const recipes = `Recipes for ${name}\n\n${mealPlan?.split('Day').slice(0, 2).join('Day') || 'Recipes coming soon...'}`;
     const shopping = `Shopping list based on meal plan\n\n${mealPlan?.split('\n').slice(0, 10).join('\n') || 'List coming soon...'}`;
 
-    const planPdf = await generatePdf(mealPlan, `Meal Plan for ${name}`);
-    const recipesPdf = await generatePdf(recipes, `Recipes for ${name}`);
-    const shoppingPdf = await generatePdf(shopping, `Shopping List for ${name}`);
+    const planPdf = await generatePdfBuffer(mealPlan, `Meal Plan for ${name}`);
+    const recipesPdf = await generatePdfBuffer(recipes, `Recipes for ${name}`);
+    const shoppingPdf = await generatePdfBuffer(shopping, `Shopping List for ${name}`);
 
-    res.json({ planPdf, recipesPdf, shoppingPdf });
+    res.json({
+      planPdf: planPdf.toString('base64'),
+      recipesPdf: recipesPdf.toString('base64'),
+      shoppingPdf: shoppingPdf.toString('base64')
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'PDF generation failed' });
