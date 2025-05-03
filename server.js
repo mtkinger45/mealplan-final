@@ -14,27 +14,27 @@ app.use(express.json());
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const formatPrompt = (data) => {
-  return \`
+  return `
 You are a meal planning assistant.
 
 Inputs:
-- Diet Type: \${data.dietType || 'none'}
-- Duration: \${data.duration} days
-- Meals: \${data.meals?.join(', ') || 'not specified'}
-- Dietary Preferences: \${data.dietaryPreferences || 'none'}
-- On-hand Ingredients: \${data.onHandIngredients || 'none'}
-- Appliances: \${data.appliances?.join(', ') || 'standard'}
-- Daily Calorie Target: \${data.calories || 'not specified'}
-- Protein Target: \${data.protein || 'not specified'}
-- Budget: \${data.budget || 'not specified'}
-- Meal Style: \${data.mealStyle || 'none'}
-- Cooking Requests: \${data.cookingRequests || 'none'}
-- Store: \${data.store || 'any'}
-- Calendar Insights: \${data.calendarInsights || 'none'}
-- Feedback: \${data.feedback || 'none'}
+- Diet Type: ${data.dietType || 'none'}
+- Duration: ${data.duration} days
+- Meals: ${data.meals?.join(', ') || 'not specified'}
+- Dietary Preferences: ${data.dietaryPreferences || 'none'}
+- On-hand Ingredients: ${data.onHandIngredients || 'none'}
+- Appliances: ${data.appliances?.join(', ') || 'standard'}
+- Daily Calorie Target: ${data.calories || 'not specified'}
+- Protein Target: ${data.protein || 'not specified'}
+- Budget: ${data.budget || 'not specified'}
+- Meal Style: ${data.mealStyle || 'none'}
+- Cooking Requests: ${data.cookingRequests || 'none'}
+- Store: ${data.store || 'any'}
+- Calendar Insights: ${data.calendarInsights || 'none'}
+- Feedback: ${data.feedback || 'none'}
 
-Please create a customized \${data.duration}-day meal plan using weekday names. Use easier meals on busy days based on calendar inputs. Include only \${data.meals?.join(', ') || 'all meals'} per day.
-\`;
+Please create a customized ${data.duration}-day meal plan using weekday names. Use easier meals on busy days based on calendar inputs. Include only ${data.meals?.join(', ') || 'all meals'} per day.
+`;
 };
 
 app.post('/api/mealplan', async (req, res) => {
@@ -66,9 +66,9 @@ const generatePdf = async (title, content) => {
     color: rgb(0, 0, 0)
   });
   const pdfBytes = await pdfDoc.save();
-  const filename = \`/tmp/\${title.replace(/\s+/g, '_')}.pdf\`;
+  const filename = `/tmp/${title.replace(/\s+/g, '_')}.pdf`;
   await fs.writeFile(filename, pdfBytes);
-  return \`https://mealplan-final.onrender.com/static/\${title.replace(/\s+/g, '_')}.pdf\`;
+  return `https://mealplan-final.onrender.com/static/${title.replace(/\s+/g, '_')}.pdf`;
 };
 
 app.use('/static', express.static('/tmp'));
