@@ -3,76 +3,89 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { OpenAI } from 'openai';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import fs from 'fs/promises';
 
 dotenv.config();
 const app = express();
-const port = process.env.PORT || 3000;
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
 app.use(cors());
 app.use(express.json());
 
-function getWeekdays(startDay, count) {
-  const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  const startIndex = weekdays.indexOf(startDay);
-  return Array.from({ length: count }, (_, i) => weekdays[(startIndex + i) % 7]);
-}
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+const formatPrompt = (data) => {
+  return \`
+You are a meal planning assistant.
+
+Inputs:
+- Diet Type: \${data.dietType || 'none'}
+- Duration: \${data.duration} days
+- Meals per Day: \${data.meals?.join(', ') || 'not specified'}
+- Dietary Preferences: \${data.dietaryPreferences || 'none'}
+- On-hand Ingredients: \${data.onHandIngredients || 'none'}
+- Appliances: \${data.appliances?.join(', ') || 'standard kitchen'}
+- Daily Calorie Target: \${data.calories || 'not specified'}
+- Daily Protein Target: \${data.protein || 'not specified'}
+- Budget: \${data.budget || 'not specified'}
+- Meal Style: \${data.mealStyle || 'none'}
+- Cooking Requests: \${data.cookingRequests || 'none'}
+- Store: \${data.store || 'any'}
+- Calendar Insights: \${data.calendarInsights || 'none'}
+- Feedback: \${data.feedback || 'none'}
+
+Generate a custom \${data.duration}-day meal plan, using weekday names. Assign quicker meals to days with activities mentioned in calendar insights. Only include: \${data.meals?.join(', ') || 'breakfast, lunch, dinner'}.
+\`;
+};
 
 app.post('/api/mealplan', async (req, res) => {
   try {
-    const {
-      name, email, duration, people, dietType, dietaryPreferences, meals,
-      appliances, calories, protein, mealStyle, cookingRequests,
-      budget, store, onHandIngredients, calendarInsights, feedback
-    } = req.body;
-
-    const today = new Date();
-    const weekdayStart = getWeekdays(today.toLocaleString('en-US', { weekday: 'long' }), parseInt(duration || 7));
-
-    const basePrompt = `
-You are a meal planning assistant. Create a customized meal plan labeled by weekday (e.g., Monday, Tuesday...).
-Use this data:
-- Diet: ${dietType || 'any'}
-- Meals requested: ${Array.isArray(meals) ? meals.join(', ') : meals}
-- Daily Calories: ${calories || 'any'}
-- Daily Protein: ${protein || 'any'}
-- Number of People: ${people}
-- Store: ${store}
-- Budget: ${budget || 'unspecified'}
-- Preferred Meal Style: ${mealStyle || 'any'}
-- Dietary Restrictions: ${dietaryPreferences || 'none'}
-- Appliances Available: ${Array.isArray(appliances) ? appliances.join(', ') : appliances}
-- Ingredients On Hand: ${onHandIngredients || 'none'}
-- Special Requests: ${cookingRequests || 'none'}
-
-Schedule Notes: ${calendarInsights || 'none'}
-
-Only use requested meals. On busy days (e.g., if calendarInsights mention activities like baseball or church), make meals simpler or prep-ahead (like crockpot, air fryer, or leftovers). Use the week starting on ${weekdayStart[0]} and show each day explicitly.
-
-${feedback ? `The user also said they want these changes: ${feedback}` : ''}
-
-Return the plan as:
-Monday:
-- Breakfast: ...
-- Lunch: ...
-- Supper: ...
-
-Continue through the full week.`;
-
-    const chatResponse = await openai.chat.completions.create({
-      model: 'gpt-4-turbo',
-      messages: [{ role: 'user', content: basePrompt }],
-      temperature: 0.7,
+    const prompt = formatPrompt(req.body);
+    const chat = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        { role: 'system', content: 'You are a helpful meal planning assistant.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.7
     });
-
-    res.json({ mealPlan: chatResponse.choices[0].message.content });
+    const mealPlan = chat.choices[0]?.message?.content;
+    res.json({ mealPlan });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: err.message || 'Meal plan generation failed' });
   }
 });
 
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+const generatePdf = async (title, text) => {
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage();
+  const { width, height } = page.getSize();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontSize = 12;
+  page.drawText(text.slice(0, 1000), {
+    x: 50,
+    y: height - 100,
+    size: fontSize,
+    font,
+    color: rgb(0, 0, 0)
+  });
+  const pdfBytes = await pdfDoc.save();
+  const filename = \`/tmp/\${title.replace(/\s+/g, '_')}.pdf\`;
+  await fs.writeFile(filename, pdfBytes);
+  return \`https://mealplan-final.onrender.com/static/\${title.replace(/\s+/g, '_')}.pdf\`;
+};
+
+app.use('/static', express.static('/tmp'));
+
+app.post('/api/finalize', async (req, res) => {
+  try {
+    const { mealPlan } = req.body;
+    const planPdf = await generatePdf('Meal_Plan', mealPlan || 'No content');
+    const recipesPdf = await generatePdf('Recipes', 'Recipes based on the plan');
+    const shoppingPdf = await generatePdf('Shopping_List', 'Shopping list based on the plan');
+    res.json({ planPdf, recipesPdf, shoppingPdf });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to generate PDFs' });
+  }
 });
+
+app.listen(3000, () => console.log('Meal plan server with PDF live'));
