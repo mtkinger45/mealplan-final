@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { OpenAI } from 'openai';
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import fs from 'fs/promises';
 
 dotenv.config();
@@ -20,12 +20,12 @@ You are a meal planning assistant.
 Inputs:
 - Diet Type: \${data.dietType || 'none'}
 - Duration: \${data.duration} days
-- Meals per Day: \${data.meals?.join(', ') || 'not specified'}
+- Meals: \${data.meals?.join(', ') || 'not specified'}
 - Dietary Preferences: \${data.dietaryPreferences || 'none'}
 - On-hand Ingredients: \${data.onHandIngredients || 'none'}
-- Appliances: \${data.appliances?.join(', ') || 'standard kitchen'}
+- Appliances: \${data.appliances?.join(', ') || 'standard'}
 - Daily Calorie Target: \${data.calories || 'not specified'}
-- Daily Protein Target: \${data.protein || 'not specified'}
+- Protein Target: \${data.protein || 'not specified'}
 - Budget: \${data.budget || 'not specified'}
 - Meal Style: \${data.mealStyle || 'none'}
 - Cooking Requests: \${data.cookingRequests || 'none'}
@@ -33,7 +33,7 @@ Inputs:
 - Calendar Insights: \${data.calendarInsights || 'none'}
 - Feedback: \${data.feedback || 'none'}
 
-Generate a custom \${data.duration}-day meal plan, using weekday names. Assign quicker meals to days with activities mentioned in calendar insights. Only include: \${data.meals?.join(', ') || 'breakfast, lunch, dinner'}.
+Please create a customized \${data.duration}-day meal plan using weekday names. Use easier meals on busy days based on calendar inputs. Include only \${data.meals?.join(', ') || 'all meals'} per day.
 \`;
 };
 
@@ -45,8 +45,7 @@ app.post('/api/mealplan', async (req, res) => {
       messages: [
         { role: 'system', content: 'You are a helpful meal planning assistant.' },
         { role: 'user', content: prompt }
-      ],
-      temperature: 0.7
+      ]
     });
     const mealPlan = chat.choices[0]?.message?.content;
     res.json({ mealPlan });
@@ -55,16 +54,14 @@ app.post('/api/mealplan', async (req, res) => {
   }
 });
 
-const generatePdf = async (title, text) => {
+const generatePdf = async (title, content) => {
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage();
-  const { width, height } = page.getSize();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const fontSize = 12;
-  page.drawText(text.slice(0, 1000), {
+  page.drawText(content.slice(0, 1000), {
     x: 50,
-    y: height - 100,
-    size: fontSize,
+    y: page.getHeight() - 100,
+    size: 12,
     font,
     color: rgb(0, 0, 0)
   });
@@ -79,13 +76,13 @@ app.use('/static', express.static('/tmp'));
 app.post('/api/finalize', async (req, res) => {
   try {
     const { mealPlan } = req.body;
-    const planPdf = await generatePdf('Meal_Plan', mealPlan || 'No content');
+    const planPdf = await generatePdf('Meal Plan', mealPlan || 'No content');
     const recipesPdf = await generatePdf('Recipes', 'Recipes based on the plan');
-    const shoppingPdf = await generatePdf('Shopping_List', 'Shopping list based on the plan');
+    const shoppingPdf = await generatePdf('Shopping List', 'Shopping list based on the plan');
     res.json({ planPdf, recipesPdf, shoppingPdf });
   } catch (err) {
-    res.status(500).json({ error: err.message || 'Failed to generate PDFs' });
+    res.status(500).json({ error: err.message || 'PDF generation failed' });
   }
 });
 
-app.listen(3000, () => console.log('Meal plan server with PDF live'));
+app.listen(3000, () => console.log('Server running on port 3000'));
