@@ -1,88 +1,121 @@
 
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import bodyParser from 'body-parser';
 import { OpenAI } from 'openai';
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
-import fs from 'fs/promises';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import fs from 'fs';
+import path from 'path';
 
-dotenv.config();
 const app = express();
+const port = process.env.PORT || 3000;
 app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json());
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const formatPrompt = (data) => {
-  return `
-You are a meal planning assistant.
-
-Inputs:
-- Diet Type: ${data.dietType || 'none'}
-- Duration: ${data.duration} days
-- Meals: ${data.meals?.join(', ') || 'not specified'}
-- Dietary Preferences: ${data.dietaryPreferences || 'none'}
-- On-hand Ingredients: ${data.onHandIngredients || 'none'}
-- Appliances: ${data.appliances?.join(', ') || 'standard'}
-- Daily Calorie Target: ${data.calories || 'not specified'}
-- Protein Target: ${data.protein || 'not specified'}
-- Budget: ${data.budget || 'not specified'}
-- Meal Style: ${data.mealStyle || 'none'}
-- Cooking Requests: ${data.cookingRequests || 'none'}
-- Store: ${data.store || 'any'}
-- Calendar Insights: ${data.calendarInsights || 'none'}
-- Feedback: ${data.feedback || 'none'}
-
-Please create a customized ${data.duration}-day meal plan using weekday names. Use easier meals on busy days based on calendar inputs. Include only ${data.meals?.join(', ') || 'all meals'} per day.
-`;
-};
-
 app.post('/api/mealplan', async (req, res) => {
+  const {
+    name,
+    email,
+    duration,
+    people,
+    dietType,
+    dietaryPreferences,
+    meals,
+    appliances,
+    calories,
+    protein,
+    mealStyle,
+    cookingRequests,
+    budget,
+    store,
+    onHandIngredients,
+    calendarInsights,
+    feedback
+  } = req.body;
+
   try {
-    const prompt = formatPrompt(req.body);
+    const prompt = `
+You are a helpful meal planning assistant.
+
+User info:
+- Name: ${name}
+- Diet: ${dietType || "no specific diet"}
+- Duration: ${duration} days
+- People: ${people}
+- Meals wanted: ${meals?.join(', ')}
+- Dietary preferences: ${dietaryPreferences || "none"}
+- Daily calories: ${calories || "not specified"}
+- Daily protein: ${protein || "not specified"}
+- Appliances: ${appliances?.join(', ') || "none"}
+- Preferred meal style: ${mealStyle || "none"}
+- Cooking notes: ${cookingRequests || "none"}
+- Grocery budget: ${budget || "not specified"}
+- Store: ${store || "not specified"}
+- Ingredients on hand: ${onHandIngredients || "none"}
+- Weekly calendar: ${calendarInsights || "none"}
+- Feedback from user: ${feedback || "none"}
+
+Create a ${duration}-day meal plan with only the selected meals (${meals?.join(', ') || "all"}). Label the days with weekday names. For busy days from calendar insights, choose simpler/faster meals.
+
+Reply ONLY with the meal plan, clearly formatted by weekday and meal. Do not include explanation text.`;
+
     const chat = await openai.chat.completions.create({
       model: 'gpt-4',
-      messages: [
-        { role: 'system', content: 'You are a helpful meal planning assistant.' },
-        { role: 'user', content: prompt }
-      ]
+      messages: [{ role: 'user', content: prompt }],
     });
-    const mealPlan = chat.choices[0]?.message?.content;
-    res.json({ mealPlan });
+
+    res.json({ mealPlan: chat.choices[0].message.content });
   } catch (err) {
-    res.status(500).json({ error: err.message || 'Meal plan generation failed' });
+    console.error(err);
+    res.status(500).json({ error: 'Meal plan generation failed' });
   }
 });
 
-const generatePdf = async (title, content) => {
+app.post('/api/finalize', async (req, res) => {
+  const { name, mealPlan } = req.body;
+  try {
+    const pdfs = {
+      planPdf: await generatePDF(`Meal Plan for ${name}`, mealPlan),
+      recipesPdf: await generatePDF(`Recipes for ${name}`, 'Recipes coming soon...'),
+      shoppingPdf: await generatePDF(`Shopping List for ${name}`, 'Shopping list based on your meal plan...')
+    };
+    res.json(pdfs);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'PDF generation failed' });
+  }
+});
+
+async function generatePDF(title, content) {
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage();
+  const { width, height } = page.getSize();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  page.drawText(content.slice(0, 1000), {
-    x: 50,
-    y: page.getHeight() - 100,
-    size: 12,
-    font,
-    color: rgb(0, 0, 0)
-  });
+  const fontSize = 12;
+
+  const lines = content.split('\n');
+  let y = height - 50;
+  page.drawText(title, { x: 50, y, size: 16, font, color: rgb(0, 0, 0) });
+  y -= 30;
+  for (const line of lines) {
+    if (y < 50) {
+      page = pdfDoc.addPage();
+      y = height - 50;
+    }
+    page.drawText(line, { x: 50, y, size: fontSize, font, color: rgb(0, 0, 0) });
+    y -= 18;
+  }
+
   const pdfBytes = await pdfDoc.save();
-  const filename = `/tmp/${title.replace(/\s+/g, '_')}.pdf`;
-  await fs.writeFile(filename, pdfBytes);
-  return `https://mealplan-final.onrender.com/static/${title.replace(/\s+/g, '_')}.pdf`;
-};
+  const filePath = `/tmp/${title.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+  fs.writeFileSync(filePath, pdfBytes);
+  return `https://mealplan-final.onrender.com/static/${path.basename(filePath)}`;
+}
 
 app.use('/static', express.static('/tmp'));
 
-app.post('/api/finalize', async (req, res) => {
-  try {
-    const { mealPlan } = req.body;
-    const planPdf = await generatePdf('Meal Plan', mealPlan || 'No content');
-    const recipesPdf = await generatePdf('Recipes', 'Recipes based on the plan');
-    const shoppingPdf = await generatePdf('Shopping List', 'Shopping list based on the plan');
-    res.json({ planPdf, recipesPdf, shoppingPdf });
-  } catch (err) {
-    res.status(500).json({ error: err.message || 'PDF generation failed' });
-  }
+app.listen(port, () => {
+  console.log(`Meal plan API running on port ${port}`);
 });
-
-app.listen(3000, () => console.log('Server running on port 3000'));
