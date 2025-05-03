@@ -35,7 +35,11 @@ app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
     const gptResult = mockMealPlanAI(data);
-    res.json({ mealPlan: gptResult.mealPlan });
+    res.json({
+      mealPlan: gptResult.mealPlan,
+      recipes: gptResult.recipes,
+      shoppingList: gptResult.shoppingList
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error generating meal plan.' });
