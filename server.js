@@ -3,7 +3,6 @@ import express from 'express';
 import cors from 'cors';
 import { OpenAI } from 'openai';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
-import fs from 'fs/promises';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -56,7 +55,7 @@ Respond with just the formatted meal plan.
   }
 });
 
-async function generatePdf(title, contentArray, filename) {
+async function generatePdfBase64(title, contentArray) {
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage();
   const { width, height } = page.getSize();
@@ -82,9 +81,7 @@ async function generatePdf(title, contentArray, filename) {
   }
 
   const pdfBytes = await pdfDoc.save();
-  const path = `/tmp/${filename}`;
-  await fs.writeFile(path, pdfBytes);
-  return path;
+  return Buffer.from(pdfBytes).toString('base64');
 }
 
 app.post('/api/finalize', async (req, res) => {
@@ -107,14 +104,14 @@ ${mealPlan}`;
     `(Adjusted for ${people || 1} people)`
   ];
 
-  const planPdf = await generatePdf('Meal Plan', planText.split('\n'), 'plan.pdf');
-  const recipesPdf = await generatePdf('Recipes', recipes, 'recipes.pdf');
-  const shoppingPdf = await generatePdf('Shopping List', shoppingList, 'shopping.pdf');
+  const planPdfBase64 = await generatePdfBase64('Meal Plan', planText.split('\n'));
+  const recipesPdfBase64 = await generatePdfBase64('Recipes', recipes);
+  const shoppingPdfBase64 = await generatePdfBase64('Shopping List', shoppingList);
 
   res.json({
-    planPdf: `https://mealplan-final.onrender.com/static/plan.pdf`,
-    recipesPdf: `https://mealplan-final.onrender.com/static/recipes.pdf`,
-    shoppingPdf: `https://mealplan-final.onrender.com/static/shopping.pdf`
+    planPdfBase64,
+    recipesPdfBase64,
+    shoppingPdfBase64
   });
 });
 
