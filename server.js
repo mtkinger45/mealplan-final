@@ -2,26 +2,59 @@
 import express from 'express';
 import cors from 'cors';
 import { OpenAI } from 'openai';
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 import fs from 'fs/promises';
 
 const app = express();
 const port = process.env.PORT || 3000;
-
 app.use(cors());
 app.use(express.json());
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-function generateWeekdays(startDate, count) {
-  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  const date = new Date(startDate);
-  let results = [];
-  for (let i = 0; i < count; i++) {
-    results.push(days[(date.getDay() + i) % 7]);
+app.post('/api/mealplan', async (req, res) => {
+  try {
+    const prompt = `
+You are MealPlanGPT. Create a customized meal plan based on the following user input:
+
+- Diet: ${req.body.dietType}
+- Meals per day: ${req.body.meals?.join(', ') || 'not specified'}
+- Daily Calories: ${req.body.calories || 'not specified'}
+- Daily Protein: ${req.body.protein || 'not specified'}
+- People to feed: ${req.body.people}
+- Days: ${req.body.duration}
+- Dietary restrictions: ${req.body.dietaryPreferences}
+- Preferred meal style: ${req.body.mealStyle}
+- Cooking requests: ${req.body.cookingRequests}
+- Appliances: ${req.body.appliances?.join(', ') || 'not specified'}
+- Calendar insights: ${req.body.calendarInsights || 'none'}
+- Store: ${req.body.store || 'none'}
+
+Create a ${req.body.duration || 7}-day meal plan using ONLY the selected meal types (${req.body.meals?.join(', ') || 'all meals'}). Match easier meals to busy days if calendar insights are given. Only use preferred ingredients and avoid restricted items.
+
+List each day with the WEEKDAY NAME (starting from today) and list only the selected meals.
+
+Format:
+Monday:
+- Breakfast: ...
+- Lunch: ...
+- Supper: ...
+
+Respond with just the formatted meal plan.
+    `;
+
+    const chat = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.7,
+    });
+
+    res.json({ mealPlan: chat.choices[0].message.content.trim() });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Meal plan generation failed' });
   }
-  return results;
-}
+});
 
 async function generatePdf(title, contentArray, filename) {
   const pdfDoc = await PDFDocument.create();
@@ -40,7 +73,7 @@ async function generatePdf(title, contentArray, filename) {
     for (const sub of wrapped) {
       if (y < 50) {
         y = height - margin;
-        pdfDoc.addPage();
+        page = pdfDoc.addPage();
       }
       page.drawText(sub, { x: margin, y, size: fontSize, font });
       y -= 18;
@@ -71,7 +104,7 @@ ${mealPlan}`;
     'Shopping List:',
     '- Item 1',
     '- Item 2',
-    '(Adjusted for people: ' + (people || 1) + ')'
+    `(Adjusted for ${people || 1} people)`
   ];
 
   const planPdf = await generatePdf('Meal Plan', planText.split('\n'), 'plan.pdf');
