@@ -71,8 +71,12 @@ async function generatePdfBuffer(content, title) {
 app.post('/api/finalize', async (req, res) => {
   try {
     const { name, mealPlan } = req.body;
-    const recipes = `Recipes for ${name}\n\n${mealPlan?.split('Day').slice(0, 2).join('Day') || 'Recipes coming soon...'}`;
-    const shopping = `Shopping list based on meal plan\n\n${mealPlan?.split('\n').slice(0, 10).join('\n') || 'List coming soon...'}`;
+    const recipes = `Recipes for ${name}
+
+${mealPlan?.split('Day').slice(0, 2).join('Day') || 'Recipes coming soon...'}`;
+    const shopping = `Shopping list based on meal plan
+
+${mealPlan?.split('\n').slice(0, 10).join('\n') || 'List coming soon...'}`;
 
     const planPdf = await generatePdfBuffer(mealPlan, `Meal Plan for ${name}`);
     const recipesPdf = await generatePdfBuffer(recipes, `Recipes for ${name}`);

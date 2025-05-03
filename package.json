@@ -1,1 +1,16 @@
-{ "name": "mealplan-api", "version": "1.0.0", "main": "server.js", "type": "module", "dependencies": { "express": "^4.18.2", "openai": "^4.0.0", "pdf-lib": "^1.17.1", "body-parser": "^1.20.2" } }
+{
+  "name": "mealplan-api",
+  "version": "1.0.0",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "openai": "^4.28.1",
+    "pdf-lib": "^1.17.1"
+  }
+}
