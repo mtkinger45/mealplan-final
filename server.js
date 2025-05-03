@@ -70,16 +70,27 @@ async function generatePdf(content, title) {
   const pdfBytes = await pdfDoc.save();
 
   const formData = new FormData();
-  formData.append('file', Buffer.from(pdfBytes), { filename: `${title}.pdf`, contentType: 'application/pdf' });
+  formData.append('file', Buffer.from(pdfBytes), {
+    filename: `${title}.pdf`,
+    contentType: 'application/pdf'
+  });
 
   const uploadRes = await fetch('https://file.io/?expires=1d', {
     method: 'POST',
-    body: formData
+    body: formData,
+    headers: formData.getHeaders?.() || {}
   });
 
   const uploadJson = await uploadRes.json();
-  return uploadJson.link || null;
+
+  if (!uploadJson.success) {
+    console.error('File upload failed:', uploadJson);
+    throw new Error('Failed to upload PDF');
+  }
+
+  return uploadJson.link;
 }
+
 
 app.post('/api/finalize', async (req, res) => {
   try {
