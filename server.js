@@ -26,6 +26,10 @@ app.post('/api/mealplan', async (req, res) => {
     ? data.appliances.join(', ')
     : data.appliances || 'any';
 
+  const feedbackInstruction = data.feedback
+    ? `Please revise the meal plan based on this feedback: ${data.feedback}. Do not include any ingredients or meals mentioned as unwanted.`
+    : '';
+
   const prompt = `
 You are a helpful meal planner AI. Create a ${data.duration || '7'}-day meal plan for a household of ${data.people || '4'} people following a ${data.dietType || 'standard'} diet.
 
@@ -44,7 +48,7 @@ If helpful, this is their budget: ${data.budget || 'not specified'} and preferre
 These ingredients are already in their kitchen: ${data.onHandIngredients || 'none'}.
 And their weekly schedule is: ${data.calendarInsights || 'not specified'}.
 
-If feedback is provided, take it into account: ${data.feedback || 'none'}.
+${feedbackInstruction}
 
 Format the meal plan clearly by day and meal.
 `;
