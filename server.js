@@ -2,8 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import { OpenAI } from 'openai';
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 import fetch from 'node-fetch';
+import FormData from 'form-data';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -23,14 +24,18 @@ app.post('/api/mealplan', async (req, res) => {
 User feedback: ${feedback}
 
 Original Request:
-${JSON.stringify(userData, null, 2)}`
+${JSON.stringify(userData, null, 2)}
+
+Make sure to label each day using real weekdays (e.g., Monday, Tuesday). Use 'calendarInsights' to match busy days with quicker meals.`
       : `Create a personalized meal plan based on the user's input:
-${JSON.stringify(userData, null, 2)}`;
+${JSON.stringify(userData, null, 2)}
+
+Make sure to label each day using real weekdays (e.g., Monday, Tuesday). Use 'calendarInsights' to match busy days with quicker meals.`;
 
     const chat = await openai.chat.completions.create({
       model: 'gpt-4',
       messages: [
-        { role: 'system', content: 'You are a meal planning assistant.' },
+        { role: 'system', content: 'You are a meal planning assistant. Always label the days using weekdays (e.g., Monday, Tuesday) and adjust meal difficulty based on calendarInsights.' },
         { role: 'user', content: prompt }
       ]
     });
@@ -49,7 +54,6 @@ async function generatePdf(content, title) {
   const { width, height } = page.getSize();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontSize = 12;
-  const textWidth = font.widthOfTextAtSize(content, fontSize);
 
   const lines = content.match(/.{1,90}/g) || [content];
   let y = height - 50;
@@ -58,16 +62,19 @@ async function generatePdf(content, title) {
   y -= 30;
 
   for (const line of lines) {
+    if (y < 50) break;
     page.drawText(line, { x: 50, y, size: fontSize, font });
     y -= 20;
   }
 
   const pdfBytes = await pdfDoc.save();
 
+  const formData = new FormData();
+  formData.append('file', Buffer.from(pdfBytes), { filename: `${title}.pdf`, contentType: 'application/pdf' });
+
   const uploadRes = await fetch('https://file.io/?expires=1d', {
     method: 'POST',
-    body: pdfBytes,
-    headers: { 'Content-Type': 'application/pdf' },
+    body: formData
   });
 
   const uploadJson = await uploadRes.json();
