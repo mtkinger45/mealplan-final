@@ -66,7 +66,8 @@ Reply ONLY with the meal plan, clearly formatted by weekday and meal. Do not inc
       messages: [{ role: 'user', content: prompt }],
     });
 
-    res.json({ mealPlan: chat.choices[0].message.content });
+    const mealPlan = chat.choices[0].message.content;
+    res.json({ mealPlan });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Meal plan generation failed' });
@@ -74,12 +75,42 @@ Reply ONLY with the meal plan, clearly formatted by weekday and meal. Do not inc
 });
 
 app.post('/api/finalize', async (req, res) => {
-  const { name, mealPlan } = req.body;
+  const { name, mealPlan, people, onHandIngredients } = req.body;
   try {
+    const recipePrompt = `
+You are a recipe generator. The user is serving ${people} people.
+
+Given the following meal plan:
+${mealPlan}
+
+Generate full recipes for each meal. Include ingredients and preparation steps. Scale ingredients for ${people} people.
+`;
+
+    const recipeResponse = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: recipePrompt }],
+    });
+    const recipes = recipeResponse.choices[0].message.content;
+
+    const shoppingPrompt = `
+You are a smart grocery list assistant.
+
+From these recipes:
+${recipes}
+
+Create a complete shopping list. Remove items the user already has: ${onHandIngredients || "none"}. Consolidate similar items and format the list cleanly.
+`;
+
+    const shoppingResponse = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: shoppingPrompt }],
+    });
+    const shoppingList = shoppingResponse.choices[0].message.content;
+
     const pdfs = {
       planPdf: await generatePDF(`Meal Plan for ${name}`, mealPlan),
-      recipesPdf: await generatePDF(`Recipes for ${name}`, 'Recipes coming soon...'),
-      shoppingPdf: await generatePDF(`Shopping List for ${name}`, 'Shopping list based on your meal plan...')
+      recipesPdf: await generatePDF(`Recipes for ${name}`, recipes),
+      shoppingPdf: await generatePDF(`Shopping List for ${name}`, shoppingList)
     };
     res.json(pdfs);
   } catch (err) {
@@ -90,7 +121,7 @@ app.post('/api/finalize', async (req, res) => {
 
 async function generatePDF(title, content) {
   const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage();
+  let page = pdfDoc.addPage();
   const { width, height } = page.getSize();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontSize = 12;
