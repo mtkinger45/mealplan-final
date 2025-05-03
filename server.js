@@ -1,38 +1,55 @@
+// server.js
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
 import { createPdfFromText } from './pdf.js';
+import OpenAI from 'openai';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 app.use(cors());
 app.use(bodyParser.json({ limit: '5mb' }));
 
-function mockMealPlanAI(data) {
-  const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  const totalDays = parseInt(data.duration || 7);
-  const selectedMeals = data.meals || ['Supper'];
-  let meals = [];
+async function generateMealPlanWithGPT(data) {
+  const prompt = `You are a professional meal planner. Based on the user's preferences below, create a ${data.duration || 7}-day meal plan. Each day should include: ${data.meals?.join(', ') || 'Supper'}.
 
-  for (let i = 0; i < totalDays; i++) {
-    const day = weekdays[i % 7];
-    selectedMeals.forEach(mealType => {
-      meals.push(`${day} ${mealType}: Example meal for ${mealType}`);
-    });
-  }
+User info:
+Diet Type: ${data.dietType || 'Any'}
+Preferences: ${data.dietaryPreferences || 'None'}
+Cooking Style: ${data.mealStyle || 'Any'}
+Requests: ${data.cookingRequests || 'None'}
+Available Appliances: ${data.appliances?.join(', ') || 'None'}
+Ingredients on hand: ${data.onHandIngredients || 'None'}
+Schedule insights: ${data.calendarInsights || 'None'}
+
+Please format the meal plan clearly, and provide a simple shopping list and recipe summaries at the end.`;
+
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [
+      { role: 'system', content: 'You are a professional meal planner.' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.7,
+    max_tokens: 2000
+  });
+
+  const result = completion.choices[0].message.content;
+  const [mealPlanPart, recipesPart, shoppingListPart] = result.split(/(?=Recipe|Shopping List)/i);
 
   return {
-    mealPlan: meals.join('\n'),
-    recipes: 'Recipe 1: Ingredients...\nRecipe 2: Instructions...\n',
-    shoppingList: 'Eggs\nBeef\nBroccoli\nSweet Potatoes\n',
+    mealPlan: mealPlanPart.trim(),
+    recipes: (recipesPart || 'Recipes coming soon...').trim(),
+    shoppingList: (shoppingListPart || 'Shopping list coming soon...').trim(),
   };
 }
 
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
-    const gptResult = mockMealPlanAI(data);
+    const gptResult = await generateMealPlanWithGPT(data);
     res.json({
       mealPlan: gptResult.mealPlan,
       recipes: gptResult.recipes,
