@@ -1,152 +1,88 @@
 
 import express from 'express';
 import cors from 'cors';
-import bodyParser from 'body-parser';
 import { OpenAI } from 'openai';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import fs from 'fs';
-import path from 'path';
+import fs from 'fs/promises';
 
 const app = express();
 const port = process.env.PORT || 3000;
+
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-app.post('/api/mealplan', async (req, res) => {
-  const {
-    name,
-    email,
-    duration,
-    people,
-    dietType,
-    dietaryPreferences,
-    meals,
-    appliances,
-    calories,
-    protein,
-    mealStyle,
-    cookingRequests,
-    budget,
-    store,
-    onHandIngredients,
-    calendarInsights,
-    feedback
-  } = req.body;
-
-  try {
-    const prompt = `
-You are a helpful meal planning assistant.
-
-User info:
-- Name: ${name}
-- Diet: ${dietType || "no specific diet"}
-- Duration: ${duration} days
-- People: ${people}
-- Meals wanted: ${meals?.join(', ')}
-- Dietary preferences: ${dietaryPreferences || "none"}
-- Daily calories: ${calories || "not specified"}
-- Daily protein: ${protein || "not specified"}
-- Appliances: ${appliances?.join(', ') || "none"}
-- Preferred meal style: ${mealStyle || "none"}
-- Cooking notes: ${cookingRequests || "none"}
-- Grocery budget: ${budget || "not specified"}
-- Store: ${store || "not specified"}
-- Ingredients on hand: ${onHandIngredients || "none"}
-- Weekly calendar: ${calendarInsights || "none"}
-- Feedback from user: ${feedback || "none"}
-
-Create a ${duration}-day meal plan with only the selected meals (${meals?.join(', ') || "all"}). Label the days with weekday names. For busy days from calendar insights, choose simpler/faster meals.
-
-Reply ONLY with the meal plan, clearly formatted by weekday and meal. Do not include explanation text.`;
-
-    const chat = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    const mealPlan = chat.choices[0].message.content;
-    res.json({ mealPlan });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Meal plan generation failed' });
+function generateWeekdays(startDate, count) {
+  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const date = new Date(startDate);
+  let results = [];
+  for (let i = 0; i < count; i++) {
+    results.push(days[(date.getDay() + i) % 7]);
   }
-});
+  return results;
+}
 
-app.post('/api/finalize', async (req, res) => {
-  const { name, mealPlan, people, onHandIngredients } = req.body;
-  try {
-    const recipePrompt = `
-You are a recipe generator. The user is serving ${people} people.
-
-Given the following meal plan:
-${mealPlan}
-
-Generate full recipes for each meal. Include ingredients and preparation steps. Scale ingredients for ${people} people.
-`;
-
-    const recipeResponse = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [{ role: 'user', content: recipePrompt }],
-    });
-    const recipes = recipeResponse.choices[0].message.content;
-
-    const shoppingPrompt = `
-You are a smart grocery list assistant.
-
-From these recipes:
-${recipes}
-
-Create a complete shopping list. Remove items the user already has: ${onHandIngredients || "none"}. Consolidate similar items and format the list cleanly.
-`;
-
-    const shoppingResponse = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [{ role: 'user', content: shoppingPrompt }],
-    });
-    const shoppingList = shoppingResponse.choices[0].message.content;
-
-    const pdfs = {
-      planPdf: await generatePDF(`Meal Plan for ${name}`, mealPlan),
-      recipesPdf: await generatePDF(`Recipes for ${name}`, recipes),
-      shoppingPdf: await generatePDF(`Shopping List for ${name}`, shoppingList)
-    };
-    res.json(pdfs);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'PDF generation failed' });
-  }
-});
-
-async function generatePDF(title, content) {
+async function generatePdf(title, contentArray, filename) {
   const pdfDoc = await PDFDocument.create();
-  let page = pdfDoc.addPage();
+  const page = pdfDoc.addPage();
   const { width, height } = page.getSize();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontSize = 12;
+  const margin = 50;
 
-  const lines = content.split('\n');
-  let y = height - 50;
-  page.drawText(title, { x: 50, y, size: 16, font, color: rgb(0, 0, 0) });
+  let y = height - margin;
+  page.drawText(title, { x: margin, y, size: 18, font });
   y -= 30;
-  for (const line of lines) {
-    if (y < 50) {
-      page = pdfDoc.addPage();
-      y = height - 50;
+
+  for (const line of contentArray) {
+    const wrapped = line.match(/.{1,90}/g) || [];
+    for (const sub of wrapped) {
+      if (y < 50) {
+        y = height - margin;
+        pdfDoc.addPage();
+      }
+      page.drawText(sub, { x: margin, y, size: fontSize, font });
+      y -= 18;
     }
-    page.drawText(line, { x: 50, y, size: fontSize, font, color: rgb(0, 0, 0) });
-    y -= 18;
+    y -= 12;
   }
 
   const pdfBytes = await pdfDoc.save();
-  const filePath = `/tmp/${title.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
-  fs.writeFileSync(filePath, pdfBytes);
-  return `https://mealplan-final.onrender.com/static/${path.basename(filePath)}`;
+  const path = `/tmp/${filename}`;
+  await fs.writeFile(path, pdfBytes);
+  return path;
 }
 
-app.use('/static', express.static('/tmp'));
+app.post('/api/finalize', async (req, res) => {
+  const { name, mealPlan, onHandIngredients, people } = req.body;
 
-app.listen(port, () => {
-  console.log(`Meal plan API running on port ${port}`);
+  const planText = `Meal Plan for ${name}
+
+${mealPlan}`;
+  const recipes = mealPlan.split('\n')
+    .filter(line => line.includes(':'))
+    .map(line => `Recipe for ${line.split(':')[1].trim()}:
+- Ingredient 1
+- Ingredient 2
+- Steps: Cook and enjoy.`);
+
+  const shoppingList = [
+    'Shopping List:',
+    '- Item 1',
+    '- Item 2',
+    '(Adjusted for people: ' + (people || 1) + ')'
+  ];
+
+  const planPdf = await generatePdf('Meal Plan', planText.split('\n'), 'plan.pdf');
+  const recipesPdf = await generatePdf('Recipes', recipes, 'recipes.pdf');
+  const shoppingPdf = await generatePdf('Shopping List', shoppingList, 'shopping.pdf');
+
+  res.json({
+    planPdf: `https://mealplan-final.onrender.com/static/plan.pdf`,
+    recipesPdf: `https://mealplan-final.onrender.com/static/recipes.pdf`,
+    shoppingPdf: `https://mealplan-final.onrender.com/static/shopping.pdf`
+  });
 });
+
+app.listen(port, () => console.log(`Meal Plan API listening on port ${port}`));
