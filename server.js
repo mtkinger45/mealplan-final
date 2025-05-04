@@ -26,10 +26,19 @@ app.use(cors({
 app.use(bodyParser.json({ limit: '5mb' }));
 
 function formatBoldHeadings(text) {
-  return text.replace(/\*\*(.*?)\*\*/g, (match, p1) => `\n<b>${p1}</b>`)
-              .replace(/__(.*?)__/g, (match, p1) => `\n<b>${p1}</b>`)
-              .replace(/^(MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY)/gm, '<b>$1</b>');
+  // Convert **text** or __text__ to bold HTML
+  let formatted = text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+                      .replace(/__(.*?)__/g, '<b>$1</b>');
+
+  // Only convert weekday lines to bold if they're not already inside <b> tags
+  formatted = formatted.replace(
+    /^(?!(<b>))\b(MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY)\b(?!(<\/b>))/gm,
+    '<b>$2</b>'
+  );
+
+  return formatted;
 }
+
 
 async function generateMealPlanWithGPT(data) {
   const {
