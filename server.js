@@ -93,7 +93,7 @@ app.post('/api/finalize', async (req, res) => {
 
     res.json({ planPdf, recipesPdf, shoppingPdf });
   } catch (err) {
-    console.error('Error in /api/finalize:', err);
+    console.error('Error in /api/finalize:', err.message, err.stack);
     res.status(500).json({ error: 'Failed to generate PDFs.' });
   }
 });
