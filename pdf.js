@@ -1,30 +1,14 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import PDFDocument from 'pdfkit';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-// ...s3 client config...
-
-export async function uploadPdfToS3(buffer, key) {
-  const bucketName = process.env.AWS_BUCKET_NAME;
-
-  // Step 1: Upload the file
-  const putCommand = new PutObjectCommand({
-    Bucket: bucketName,
-    Key: key,
-    Body: buffer,
-    ContentType: 'application/pdf'
-  });
-  await s3.send(putCommand);
-
-  // Step 2: Generate a GET link for downloading
-  const getCommand = new GetObjectCommand({
-    Bucket: bucketName,
-    Key: key
-  });
-
-  const url = await getSignedUrl(s3, getCommand, { expiresIn: 3600 });
-  return url;
-}
-
+const s3 = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+  }
+});
 
 export async function createPdfFromText(text) {
   return new Promise((resolve, reject) => {
@@ -33,24 +17,17 @@ export async function createPdfFromText(text) {
 
     const lines = text.split('\n');
     lines.forEach((line, idx) => {
-      const boldMatch = line.match(/^<b>(.*)<\/b>$/);
-      const italicMatch = line.match(/^_(.*)_$/);
-
-      if (boldMatch) {
-        doc.font('Helvetica-Bold').fontSize(14).text(boldMatch[1]);
-      } else if (italicMatch) {
-        doc.font('Helvetica-Oblique').fontSize(12).text(italicMatch[1]);
+      // Bold text between <b>...</b>
+      if (line.match(/^<b>(.*?)<\/b>$/)) {
+        const content = line.replace(/<\/?b>/g, '');
+        doc.font('Helvetica-Bold').fontSize(14).text(content);
+      } else if (line.match(/^_.*_$/)) {
+        const content = line.replace(/^_(.*?)_$/, '$1');
+        doc.font('Helvetica-Oblique').fontSize(12).text(content);
       } else {
-        // Remove inline <b> or <i> for now and print as normal
-        const cleanedLine = line
-          .replace(/<\/?b>/g, '')
-          .replace(/<\/?i>/g, '');
-        doc.font('Helvetica').fontSize(12).text(cleanedLine);
+        doc.font('Helvetica').fontSize(12).text(line);
       }
-
-      if (idx < lines.length - 1) {
-        doc.moveDown(0.5);
-      }
+      if (idx < lines.length - 1) doc.moveDown(0.5);
     });
 
     doc.on('data', buffers.push.bind(buffers));
@@ -61,13 +38,20 @@ export async function createPdfFromText(text) {
 
 export async function uploadPdfToS3(buffer, key) {
   const bucketName = process.env.AWS_BUCKET_NAME;
-  const command = new PutObjectCommand({
+  const putCommand = new PutObjectCommand({
     Bucket: bucketName,
     Key: key,
     Body: buffer,
     ContentType: 'application/pdf'
   });
 
-  await s3.send(command);
-  return await getSignedUrl(s3, command, { expiresIn: 3600 });
+  await s3.send(putCommand);
+
+  const getCommand = new PutObjectCommand({
+    Bucket: bucketName,
+    Key: key
+  });
+
+  const url = await getSignedUrl(s3, getCommand, { expiresIn: 3600 });
+  return url;
 }
