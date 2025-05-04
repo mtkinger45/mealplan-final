@@ -25,18 +25,8 @@ app.use(cors({
 
 app.use(bodyParser.json({ limit: '5mb' }));
 
-function formatBoldHeadings(text) {
-  // Convert **text** or __text__ to bold HTML
-  let formatted = text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
-                      .replace(/__(.*?)__/g, '<b>$1</b>');
-
-  // Only bold weekdays if not already bolded
-  formatted = formatted.replace(
-    /^(?!<b>)(MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY)(?!<\/b>)/gm,
-    '<b>$1</b>'
-  );
-
-  return formatted;
+function removeBoldHtmlTags(text) {
+  return text.replace(/<b>(.*?)<\/b>/g, (_, content) => `## ${content.toUpperCase()}`);
 }
 
 async function generateMealPlanWithGPT(data) {
@@ -89,9 +79,9 @@ ${feedbackText}
   const [mealPlanPart, shoppingListPart, recipesPart] = result.split(/(?=Shopping List|Recipe Summaries)/i);
 
   return {
-    mealPlan: formatBoldHeadings(mealPlanPart?.trim() || ''),
-    shoppingList: formatBoldHeadings(shoppingListPart?.trim() || 'Shopping list coming soon...'),
-    recipes: formatBoldHeadings(recipesPart?.trim() || 'Recipes coming soon...')
+    mealPlan: removeBoldHtmlTags(mealPlanPart?.trim() || ''),
+    shoppingList: removeBoldHtmlTags(shoppingListPart?.trim() || 'Shopping list coming soon...'),
+    recipes: removeBoldHtmlTags(recipesPart?.trim() || 'Recipes coming soon...')
   };
 }
 
