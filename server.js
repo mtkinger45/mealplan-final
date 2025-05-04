@@ -64,32 +64,33 @@ app.post('/api/mealplan', async (req, res) => {
 app.post('/api/finalize', async (req, res) => {
   try {
     const { name = 'Guest', mealPlan, recipes, shoppingList } = req.body;
+
     if (!mealPlan || !recipes || !shoppingList) {
+      console.error('Missing data:', { mealPlan, recipes, shoppingList });
       return res.status(400).json({ error: 'Missing meal plan data.' });
     }
 
-    const planPdfBuffer = await createPdfFromText(`Meal Plan for ${name}
+    console.log('Generating PDFs...');
+    const planPdfBuffer = await createPdfFromText(`Meal Plan for ${name}\n\n${mealPlan}`);
+    const recipesPdfBuffer = await createPdfFromText(`Recipes for ${name}\n\n${recipes}`);
+    const shoppingPdfBuffer = await createPdfFromText(`Shopping List for ${name}\n\n${shoppingList}`);
 
-${mealPlan}`);
-    const recipesPdfBuffer = await createPdfFromText(`Recipes for ${name}
-
-${recipes}`);
-    const shoppingPdfBuffer = await createPdfFromText(`Shopping List for ${name}
-
-${shoppingList}`);
-
+    console.log('Uploading to S3...');
     const [planPdf, recipesPdf, shoppingPdf] = await Promise.all([
       uploadPdfToS3(planPdfBuffer, `${name}-plan.pdf`),
       uploadPdfToS3(recipesPdfBuffer, `${name}-recipes.pdf`),
       uploadPdfToS3(shoppingPdfBuffer, `${name}-shopping.pdf`)
     ]);
 
+    console.log('Upload successful:', { planPdf, recipesPdf, shoppingPdf });
     res.json({ planPdf, recipesPdf, shoppingPdf });
+
   } catch (err) {
     console.error('Error in /api/finalize:', err);
     res.status(500).json({ error: 'Failed to generate PDFs.' });
   }
 });
+
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
