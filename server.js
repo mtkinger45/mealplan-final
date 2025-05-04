@@ -13,7 +13,10 @@ app.use(cors({ origin: '*' }));
 app.use(bodyParser.json({ limit: '5mb' }));
 
 async function generateMealPlanWithGPT(data) {
-  const prompt = `You are a professional meal planner. Based on the user's preferences below, create a ${data.duration || 7}-day meal plan. Each day should include: ${data.meals?.join(', ') || 'Supper'}.
+ const result = completion.choices[0].message.content;
+const { mealPlan, recipes, shoppingList } = splitMealPlanSections(result);
+
+return { mealPlan, recipes, shoppingList };
 
 User info:
 Diet Type: ${data.dietType || 'Any'}
@@ -36,14 +39,18 @@ Please format the meal plan clearly, and provide a simple shopping list and reci
     max_tokens: 2000
   });
 
-  const result = completion.choices[0].message.content;
-  const [mealPlanPart, recipesPart, shoppingListPart] = result.split(/(?=Recipe|Shopping List)/i);
+  function splitMealPlanSections(gptText) {
+  const mealPlanMatch = gptText.match(/^(.*?)^#+?\s*Recipes/ims);
+  const recipesMatch = gptText.match(/^#+?\s*Recipes\s*(.*?)^#+?\s*Shopping List/ims);
+  const shoppingMatch = gptText.match(/^#+?\s*Shopping List\s*(.*)/ims);
 
   return {
-    mealPlan: mealPlanPart.trim(),
-    recipes: (recipesPart || 'Recipes coming soon...').trim(),
-    shoppingList: (shoppingListPart || 'Shopping list coming soon...').trim(),
+    mealPlan: mealPlanMatch?.[1]?.trim() || 'Meal plan section missing.',
+    recipes: recipesMatch?.[1]?.trim() || 'Recipes section missing.',
+    shoppingList: shoppingMatch?.[1]?.trim() || 'Shopping list section missing.',
   };
+}
+
 }
 
 app.post('/api/mealplan', async (req, res) => {
