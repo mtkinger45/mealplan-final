@@ -63,7 +63,10 @@ ${feedbackText}
 - Match QUICK meals on busy days (based on the user's calendar).
 - Avoid ingredients the user dislikes.
 - Make sure formatting is clear and the plan ends with a "Shopping List" and then "Recipe Summaries".
-- Use the weekday name alone on its own line for day headers (e.g., Monday).`;
+- Use the weekday name alone on its own line for day headers (e.g., Monday).
+- In the "Recipe Summaries" section, include for each meal:
+  1. Ingredients with quantities
+  2. Step-by-step cooking instructions`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
