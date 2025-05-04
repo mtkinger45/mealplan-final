@@ -1,14 +1,30 @@
-import PDFDocument from 'pdfkit';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-const s3 = new S3Client({
-  region: process.env.AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-  }
-});
+// ...s3 client config...
+
+export async function uploadPdfToS3(buffer, key) {
+  const bucketName = process.env.AWS_BUCKET_NAME;
+
+  // Step 1: Upload the file
+  const putCommand = new PutObjectCommand({
+    Bucket: bucketName,
+    Key: key,
+    Body: buffer,
+    ContentType: 'application/pdf'
+  });
+  await s3.send(putCommand);
+
+  // Step 2: Generate a GET link for downloading
+  const getCommand = new GetObjectCommand({
+    Bucket: bucketName,
+    Key: key
+  });
+
+  const url = await getSignedUrl(s3, getCommand, { expiresIn: 3600 });
+  return url;
+}
+
 
 export async function createPdfFromText(text) {
   return new Promise((resolve, reject) => {
