@@ -30,15 +30,14 @@ function formatBoldHeadings(text) {
   let formatted = text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
                       .replace(/__(.*?)__/g, '<b>$1</b>');
 
-  // Only convert weekday lines to bold if they're not already inside <b> tags
+  // Only bold weekdays if not already bolded
   formatted = formatted.replace(
-    /^(?!(<b>))\b(MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY)\b(?!(<\/b>))/gm,
-    '<b>$2</b>'
+    /^(?!<b>)(MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY)(?!<\/b>)/gm,
+    '<b>$1</b>'
   );
 
   return formatted;
 }
-
 
 async function generateMealPlanWithGPT(data) {
   const {
@@ -74,7 +73,7 @@ ${feedbackText}
 - Match QUICK meals on busy days (based on the user's calendar).
 - Avoid ingredients the user dislikes.
 - Make sure formatting is clear and the plan ends with a "Shopping List" and then "Recipe Summaries".
-- Instead of surrounding day headers with asterisks like **Monday**, use ALL CAPS formatting like MONDAY or a bold Markdown-style (e.g., __Monday__) if appropriate.`;
+- Use bold formatting like __Monday__ or **Monday** for the day headers.`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
