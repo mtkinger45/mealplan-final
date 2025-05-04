@@ -1,7 +1,10 @@
+// pdf.js
 import PDFDocument from 'pdfkit';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { PassThrough } from 'stream';
-import { v4 as uuidv4 } from 'uuid';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
@@ -11,33 +14,32 @@ const s3 = new S3Client({
   }
 });
 
-export function createPdfFromText(text) {
+export async function createPdfFromText(text) {
+  const doc = new PDFDocument();
+  const chunks = [];
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 50 });
-    const stream = new PassThrough();
-    const chunks = [];
-
-    doc.on('data', chunk => chunks.push(chunk));
+    doc.on('data', (chunk) => chunks.push(chunk));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    doc.pipe(stream);
-    doc.font('Times-Roman').fontSize(12).text(text);
+    doc.fontSize(14).text(text, { align: 'left' });
     doc.end();
   });
 }
 
-export async function uploadPdfToS3(buffer, filename) {
-  const key = `pdfs/${uuidv4()}-${filename}`;
+export async function uploadPdfToS3(pdfBuffer, filename) {
+  const bucketName = process.env.AWS_BUCKET_NAME;
 
-  const command = new PutObjectCommand({
-    Bucket: process.env.S3_BUCKET_NAME,
-    Key: key,
-    Body: buffer,
-    ContentType: 'application/pdf',
-    ACL: 'public-read'
-  });
+  const uploadParams = {
+    Bucket: bucketName,
+    Key: filename,
+    Body: pdfBuffer,
+    ContentType: 'application/pdf'
+  };
 
+  const command = new PutObjectCommand(uploadParams);
   await s3.send(command);
-  return `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
+
+  const url = await getSignedUrl(s3, command, { expiresIn: 60 * 60 });
+  return url;
 }
