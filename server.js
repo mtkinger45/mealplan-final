@@ -65,8 +65,10 @@ ${feedbackText}
 - Make sure formatting is clear and the plan ends with a "Shopping List" and then "Recipe Summaries".
 - Use the weekday name alone on its own line for day headers (e.g., Monday).
 - In the "Recipe Summaries" section, include for each meal:
-  1. Ingredients with quantities
-  2. Step-by-step cooking instructions`;
+  1. The meal name
+  2. Ingredients with quantities
+  3. Step-by-step cooking instructions
+  4. Repeat for all meals, no summaries like '(continue...)'.`
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -75,7 +77,7 @@ ${feedbackText}
       { role: 'user', content: prompt }
     ],
     temperature: 0.7,
-    max_tokens: 2000
+    max_tokens: 3500
   });
 
   const result = completion.choices[0].message.content;
