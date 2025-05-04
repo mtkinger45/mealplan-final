@@ -1,22 +1,22 @@
+// pdf.js
 import PDFDocument from 'pdfkit';
-import { PassThrough } from 'stream';
+import getStream from 'get-stream';
 
 export async function createPdfFromText(text) {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument();
-    const stream = new PassThrough();
-    const chunks = [];
+  const doc = new PDFDocument();
+  const buffers = [];
 
-    doc.on('data', chunk => chunks.push(chunk));
-    doc.on('end', () => {
-      const buffer = Buffer.concat(chunks);
-      const base64 = buffer.toString('base64');
-      resolve(`data:application/pdf;base64,${base64}`);
-    });
-    doc.on('error', reject);
+  doc.on('data', buffers.push.bind(buffers));
+  doc.on('end', () => {});
 
-    doc.pipe(stream);
-    doc.fontSize(12).text(text);
-    doc.end();
+  doc.fontSize(12).text(text, {
+    width: 450,
+    align: 'left'
   });
+
+  doc.end();
+
+  const buffer = await getStream.buffer(doc);
+  const base64 = buffer.toString('base64');
+  return `data:application/pdf;base64,${base64}`;
 }

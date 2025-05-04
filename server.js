@@ -68,9 +68,15 @@ app.post('/api/finalize', async (req, res) => {
       return res.status(400).json({ error: 'Missing meal plan data.' });
     }
 
-    const planPdf = await createPdfFromText(`Meal Plan for ${name}\n\n${mealPlan}`);
-    const recipesPdf = await createPdfFromText(`Recipes for ${name}\n\n${recipes}`);
-    const shoppingPdf = await createPdfFromText(`Shopping List for ${name}\n\n${shoppingList}`);
+    const planPdf = await createPdfFromText(`Meal Plan for ${name}
+
+${mealPlan}`);
+    const recipesPdf = await createPdfFromText(`Recipes for ${name}
+
+${recipes}`);
+    const shoppingPdf = await createPdfFromText(`Shopping List for ${name}
+
+${shoppingList}`);
 
     res.json({ planPdf, recipesPdf, shoppingPdf });
   } catch (err) {
