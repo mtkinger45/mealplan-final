@@ -1,4 +1,3 @@
-
 import PDFDocument from 'pdfkit';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -20,7 +19,7 @@ export async function createPdfFromText(text) {
     const lines = text.split('\n');
     lines.forEach((line, idx) => {
       if (line.startsWith('<b>') && line.endsWith('</b>')) {
-        const content = line.replace(/<\/?b>/g, '');
+        const content = line.replace(/<\/?.*?>/g, '');
         doc.font('Helvetica-Bold').fontSize(14).text(content, { underline: false });
       } else if (line.startsWith('_') && line.endsWith('_')) {
         const content = line.replace(/^_(.*?)_$/, '$1');
