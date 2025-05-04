@@ -9,7 +9,20 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-app.use(cors());
+// ✅ Allow only your frontend origin
+const allowedOrigins = ['https://login.gosocialfox.com'];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS not allowed from this origin'));
+    }
+  },
+  credentials: true
+}));
+
 app.use(bodyParser.json({ limit: '5mb' }));
 
 async function generateMealPlanWithGPT(data) {
