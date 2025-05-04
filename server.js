@@ -25,8 +25,8 @@ app.use(cors({
 
 app.use(bodyParser.json({ limit: '5mb' }));
 
-function removeBoldHtmlTags(text) {
-  return text.replace(/<b>(.*?)<\/b>/g, (_, content) => `## ${content.toUpperCase()}`);
+function stripHtmlAndAsterisks(text) {
+  return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1');
 }
 
 async function generateMealPlanWithGPT(data) {
@@ -63,7 +63,7 @@ ${feedbackText}
 - Match QUICK meals on busy days (based on the user's calendar).
 - Avoid ingredients the user dislikes.
 - Make sure formatting is clear and the plan ends with a "Shopping List" and then "Recipe Summaries".
-- Use bold formatting like __Monday__ or **Monday** for the day headers.`;
+- Use the weekday name alone on its own line for day headers (e.g., Monday).`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -79,9 +79,9 @@ ${feedbackText}
   const [mealPlanPart, shoppingListPart, recipesPart] = result.split(/(?=Shopping List|Recipe Summaries)/i);
 
   return {
-    mealPlan: removeBoldHtmlTags(mealPlanPart?.trim() || ''),
-    shoppingList: removeBoldHtmlTags(shoppingListPart?.trim() || 'Shopping list coming soon...'),
-    recipes: removeBoldHtmlTags(recipesPart?.trim() || 'Recipes coming soon...')
+    mealPlan: stripHtmlAndAsterisks(mealPlanPart?.trim() || ''),
+    shoppingList: stripHtmlAndAsterisks(shoppingListPart?.trim() || 'Shopping list coming soon...'),
+    recipes: stripHtmlAndAsterisks(recipesPart?.trim() || 'Recipes coming soon...')
   };
 }
 
