@@ -50,12 +50,12 @@ Please format the meal plan clearly, and provide a simple shopping list and reci
   });
 
   const result = completion.choices[0].message.content;
-  const [mealPlanPart, recipesPart, shoppingListPart] = result.split(/(?=Recipe|Shopping List)/i);
+  const [mealPlanPart, shoppingListPart, recipesPart] = result.split(/(?=Shopping List|Recipe Summaries)/i);
 
   return {
-    mealPlan: mealPlanPart.trim(),
-    recipes: (recipesPart || 'Recipes coming soon...').trim(),
-    shoppingList: (shoppingListPart || 'Shopping list coming soon...').trim(),
+    mealPlan: mealPlanPart?.trim() || '',
+    shoppingList: shoppingListPart?.trim() || 'Shopping list coming soon...',
+    recipes: recipesPart?.trim() || 'Recipes coming soon...'
   };
 }
 
