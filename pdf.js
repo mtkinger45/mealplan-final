@@ -1,4 +1,3 @@
-// pdf.js
 import PDFDocument from 'pdfkit';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { PassThrough } from 'stream';
@@ -36,7 +35,7 @@ export async function uploadPdfToS3(buffer, filename) {
     Key: key,
     Body: buffer,
     ContentType: 'application/pdf',
-    ACL: 'public-read' // Makes the file publicly accessible
+    ACL: 'public-read'
   });
 
   await s3.send(command);

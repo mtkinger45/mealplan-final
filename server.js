@@ -1,8 +1,7 @@
-// server.js
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
-import { createPdfFromText } from './pdf.js';
+import { createPdfFromText, uploadPdfToS3 } from './pdf.js';
 import OpenAI from 'openai';
 
 const app = express();
@@ -68,15 +67,21 @@ app.post('/api/finalize', async (req, res) => {
       return res.status(400).json({ error: 'Missing meal plan data.' });
     }
 
-    const planPdf = await createPdfFromText(`Meal Plan for ${name}
+    const planPdfBuffer = await createPdfFromText(`Meal Plan for ${name}
 
 ${mealPlan}`);
-    const recipesPdf = await createPdfFromText(`Recipes for ${name}
+    const recipesPdfBuffer = await createPdfFromText(`Recipes for ${name}
 
 ${recipes}`);
-    const shoppingPdf = await createPdfFromText(`Shopping List for ${name}
+    const shoppingPdfBuffer = await createPdfFromText(`Shopping List for ${name}
 
 ${shoppingList}`);
+
+    const [planPdf, recipesPdf, shoppingPdf] = await Promise.all([
+      uploadPdfToS3(planPdfBuffer, `${name}-plan.pdf`),
+      uploadPdfToS3(recipesPdfBuffer, `${name}-recipes.pdf`),
+      uploadPdfToS3(shoppingPdfBuffer, `${name}-shopping.pdf`)
+    ]);
 
     res.json({ planPdf, recipesPdf, shoppingPdf });
   } catch (err) {
