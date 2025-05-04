@@ -1,10 +1,7 @@
 
-// pdf.js
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import PDFDocument from 'pdfkit';
-import { PassThrough } from 'stream';
-import { Readable } from 'stream';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
@@ -15,46 +12,46 @@ const s3 = new S3Client({
 });
 
 export async function createPdfFromText(text) {
-  console.log('[createPdfFromText] Generating PDF for content...');
-  const doc = new PDFDocument();
-  const buffers = [];
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 40 });
+    const buffers = [];
 
-  doc.on('data', buffers.push.bind(buffers));
-  doc.on('end', () => {
-    console.log('[createPdfFromText] PDF generation complete.');
-  });
+    // Bold headings like <b>Monday</b>
+    const lines = text.split('\n');
+    lines.forEach((line, idx) => {
+      if (line.startsWith('<b>') && line.endsWith('</b>')) {
+        const content = line.replace(/<\/?b>/g, '');
+        doc.font('Helvetica-Bold').fontSize(14).text(content, { underline: false });
+      } else if (line.startsWith('_') && line.endsWith('_')) {
+        const content = line.replace(/^_(.*?)_$/, '$1');
+        doc.font('Helvetica-Oblique').fontSize(12).text(content);
+      } else {
+        doc.font('Helvetica').fontSize(12).text(line);
+      }
+      if (idx < lines.length - 1) doc.moveDown(0.5);
+    });
 
-  doc.text(text);
-  doc.end();
-
-  return new Promise((resolve) => {
+    doc.on('data', buffers.push.bind(buffers));
     doc.on('end', () => {
       const pdfBuffer = Buffer.concat(buffers);
       resolve(pdfBuffer);
     });
+
+    doc.end();
   });
 }
 
-export async function uploadPdfToS3(buffer, filename) {
-  console.log(`[uploadPdfToS3] Uploading ${filename} to S3...`);
-  
+export async function uploadPdfToS3(buffer, key) {
   const bucketName = process.env.AWS_BUCKET_NAME;
-
-  const uploadCommand = new PutObjectCommand({
+  const command = new PutObjectCommand({
     Bucket: bucketName,
-    Key: filename,
+    Key: key,
     Body: buffer,
     ContentType: 'application/pdf'
   });
 
-  await s3.send(uploadCommand);
+  await s3.send(command);
 
-  // Now generate a signed GET URL to allow download
-  const getCommand = new GetObjectCommand({
-    Bucket: bucketName,
-    Key: filename
-  });
-
-  const url = await getSignedUrl(s3, getCommand, { expiresIn: 3600 }); // 1 hour
+  const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
   return url;
 }
