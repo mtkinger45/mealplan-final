@@ -26,18 +26,39 @@ app.use(cors({
 app.use(bodyParser.json({ limit: '5mb' }));
 
 async function generateMealPlanWithGPT(data) {
-  const prompt = `You are a professional meal planner. Based on the user's preferences below, create a ${data.duration || 7}-day meal plan. Each day should include: ${data.meals?.join(', ') || 'Supper'}.
+  const {
+    duration = 7,
+    meals = ['Supper'],
+    dietType = 'Any',
+    dietaryPreferences = 'None',
+    mealStyle = 'Any',
+    cookingRequests = 'None',
+    appliances = [],
+    onHandIngredients = 'None',
+    calendarInsights = 'None',
+    feedback = ''
+  } = data;
+
+  const feedbackText = feedback ? `NOTE: The user has requested this revision: "${feedback}". Please revise the new meal plan accordingly.` : '';
+
+  const prompt = `You are a professional meal planner. Based on the user's preferences, create a ${duration}-day meal plan. Each day should include the following meals: ${meals.join(', ')}.
 
 User info:
-Diet Type: ${data.dietType || 'Any'}
-Preferences: ${data.dietaryPreferences || 'None'}
-Cooking Style: ${data.mealStyle || 'Any'}
-Requests: ${data.cookingRequests || 'None'}
-Available Appliances: ${data.appliances?.join(', ') || 'None'}
-Ingredients on hand: ${data.onHandIngredients || 'None'}
-Schedule insights: ${data.calendarInsights || 'None'}
+- Diet Type: ${dietType}
+- Preferences: ${dietaryPreferences}
+- Cooking Style: ${mealStyle}
+- Special Requests: ${cookingRequests}
+- Available Appliances: ${appliances.join(', ') || 'None'}
+- Ingredients on hand: ${onHandIngredients}
+- Schedule insights: ${calendarInsights}
 
-Please format the meal plan clearly, and provide a simple shopping list and recipe summaries at the end.`;
+${feedbackText}
+
+🔁 Please:
+- Use weekday names (Monday–Sunday) in order, not 'Day 1', 'Day 2'.
+- Match QUICK meals on busy days (based on the user's calendar).
+- Avoid ingredients the user dislikes.
+- Make sure formatting is clear and the plan ends with a "Shopping List" and then "Recipe Summaries".`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
