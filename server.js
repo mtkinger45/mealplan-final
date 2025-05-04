@@ -9,14 +9,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-app.use(cors({ origin: '*' }));
+app.use(cors());
 app.use(bodyParser.json({ limit: '5mb' }));
 
 async function generateMealPlanWithGPT(data) {
- const result = completion.choices[0].message.content;
-const { mealPlan, recipes, shoppingList } = splitMealPlanSections(result);
-
-return { mealPlan, recipes, shoppingList };
+  const prompt = `You are a professional meal planner. Based on the user's preferences below, create a ${data.duration || 7}-day meal plan. Each day should include: ${data.meals?.join(', ') || 'Supper'}.
 
 User info:
 Diet Type: ${data.dietType || 'Any'}
@@ -39,18 +36,14 @@ Please format the meal plan clearly, and provide a simple shopping list and reci
     max_tokens: 2000
   });
 
-  function splitMealPlanSections(gptText) {
-  const mealPlanMatch = gptText.match(/^(.*?)^#+?\s*Recipes/ims);
-  const recipesMatch = gptText.match(/^#+?\s*Recipes\s*(.*?)^#+?\s*Shopping List/ims);
-  const shoppingMatch = gptText.match(/^#+?\s*Shopping List\s*(.*)/ims);
+  const result = completion.choices[0].message.content;
+  const [mealPlanPart, recipesPart, shoppingListPart] = result.split(/(?=Recipe|Shopping List)/i);
 
   return {
-    mealPlan: mealPlanMatch?.[1]?.trim() || 'Meal plan section missing.',
-    recipes: recipesMatch?.[1]?.trim() || 'Recipes section missing.',
-    shoppingList: shoppingMatch?.[1]?.trim() || 'Shopping list section missing.',
+    mealPlan: mealPlanPart.trim(),
+    recipes: (recipesPart || 'Recipes coming soon...').trim(),
+    shoppingList: (shoppingListPart || 'Shopping list coming soon...').trim(),
   };
-}
-
 }
 
 app.post('/api/mealplan', async (req, res) => {
@@ -71,33 +64,26 @@ app.post('/api/mealplan', async (req, res) => {
 app.post('/api/finalize', async (req, res) => {
   try {
     const { name = 'Guest', mealPlan, recipes, shoppingList } = req.body;
-
     if (!mealPlan || !recipes || !shoppingList) {
-      console.error('Missing data:', { mealPlan, recipes, shoppingList });
       return res.status(400).json({ error: 'Missing meal plan data.' });
     }
 
-    console.log('Generating PDFs...');
     const planPdfBuffer = await createPdfFromText(`Meal Plan for ${name}\n\n${mealPlan}`);
     const recipesPdfBuffer = await createPdfFromText(`Recipes for ${name}\n\n${recipes}`);
     const shoppingPdfBuffer = await createPdfFromText(`Shopping List for ${name}\n\n${shoppingList}`);
 
-    console.log('Uploading to S3...');
     const [planPdf, recipesPdf, shoppingPdf] = await Promise.all([
       uploadPdfToS3(planPdfBuffer, `${name}-plan.pdf`),
       uploadPdfToS3(recipesPdfBuffer, `${name}-recipes.pdf`),
       uploadPdfToS3(shoppingPdfBuffer, `${name}-shopping.pdf`)
     ]);
 
-    console.log('Upload successful:', { planPdf, recipesPdf, shoppingPdf });
     res.json({ planPdf, recipesPdf, shoppingPdf });
-
   } catch (err) {
     console.error('Error in /api/finalize:', err);
     res.status(500).json({ error: 'Failed to generate PDFs.' });
   }
 });
-
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
