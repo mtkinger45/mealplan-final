@@ -15,27 +15,30 @@ export async function createPdfFromText(text) {
     const doc = new PDFDocument({ margin: 40 });
     const buffers = [];
 
-    // Bold headings like <b>Monday</b>
     const lines = text.split('\n');
     lines.forEach((line, idx) => {
-      if (line.startsWith('<b>') && line.endsWith('</b>')) {
-        const content = line.replace(/<\/?.*?>/g, '');
-        doc.font('Helvetica-Bold').fontSize(14).text(content, { underline: false });
-      } else if (line.startsWith('_') && line.endsWith('_')) {
-        const content = line.replace(/^_(.*?)_$/, '$1');
-        doc.font('Helvetica-Oblique').fontSize(12).text(content);
+      const boldMatch = line.match(/^<b>(.*)<\/b>$/);
+      const italicMatch = line.match(/^_(.*)_$/);
+
+      if (boldMatch) {
+        doc.font('Helvetica-Bold').fontSize(14).text(boldMatch[1]);
+      } else if (italicMatch) {
+        doc.font('Helvetica-Oblique').fontSize(12).text(italicMatch[1]);
       } else {
-        doc.font('Helvetica').fontSize(12).text(line);
+        // Remove inline <b> or <i> for now and print as normal
+        const cleanedLine = line
+          .replace(/<\/?b>/g, '')
+          .replace(/<\/?i>/g, '');
+        doc.font('Helvetica').fontSize(12).text(cleanedLine);
       }
-      if (idx < lines.length - 1) doc.moveDown(0.5);
+
+      if (idx < lines.length - 1) {
+        doc.moveDown(0.5);
+      }
     });
 
     doc.on('data', buffers.push.bind(buffers));
-    doc.on('end', () => {
-      const pdfBuffer = Buffer.concat(buffers);
-      resolve(pdfBuffer);
-    });
-
+    doc.on('end', () => resolve(Buffer.concat(buffers)));
     doc.end();
   });
 }
@@ -50,7 +53,5 @@ export async function uploadPdfToS3(buffer, key) {
   });
 
   await s3.send(command);
-
-  const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
-  return url;
+  return await getSignedUrl(s3, command, { expiresIn: 3600 });
 }
