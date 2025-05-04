@@ -1,9 +1,7 @@
-// pdf.js
+
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import PDFDocument from 'pdfkit';
-import { PassThrough } from 'stream';
-import { Readable } from 'stream';
 
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
@@ -23,7 +21,20 @@ export async function createPdfFromText(text) {
     console.log('[createPdfFromText] PDF generation complete.');
   });
 
-  doc.text(text);
+  const lines = text.split('\n');
+  lines.forEach((line, idx) => {
+    if (line.match(/^<b>.*<\/b>$/)) {
+      const clean = line.replace(/<\/?.?b>/g, '');
+      doc.font('Helvetica-Bold').fontSize(14).text(clean);
+    } else if (line.match(/^<i>.*<\/i>$/) || line.match(/^_.*_$/)) {
+      const clean = line.replace(/<\/?.?i>/g, '').replace(/^_(.*?)_$/, '$1');
+      doc.font('Helvetica-Oblique').fontSize(12).text(clean);
+    } else {
+      doc.font('Helvetica').fontSize(12).text(line);
+    }
+    if (idx < lines.length - 1) doc.moveDown(0.5);
+  });
+
   doc.end();
 
   return new Promise((resolve) => {
@@ -36,7 +47,6 @@ export async function createPdfFromText(text) {
 
 export async function uploadPdfToS3(buffer, filename) {
   console.log(`[uploadPdfToS3] Uploading ${filename} to S3...`);
-  
   const bucketName = process.env.AWS_BUCKET_NAME;
 
   const uploadCommand = new PutObjectCommand({
@@ -48,12 +58,11 @@ export async function uploadPdfToS3(buffer, filename) {
 
   await s3.send(uploadCommand);
 
-  // Now generate a signed GET URL to allow download
   const getCommand = new GetObjectCommand({
     Bucket: bucketName,
     Key: filename
   });
 
-  const url = await getSignedUrl(s3, getCommand, { expiresIn: 3600 }); // 1 hour
+  const url = await getSignedUrl(s3, getCommand, { expiresIn: 3600 });
   return url;
 }
