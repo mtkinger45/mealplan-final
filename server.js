@@ -66,7 +66,8 @@ ${feedbackText}
 - Use the weekday name alone on its own line for day headers (e.g., Monday).
 - In the "Recipe Summaries" section, include for each meal:
   1. Ingredients with quantities using US measurements (cups, oz, tbsp, etc.)
-  2. Step-by-step cooking instructions using Fahrenheit for temperature and common American cooking terms`;
+  2. Step-by-step cooking instructions using Fahrenheit for temperature and common American cooking terms
+  3. Include prep time, cook time, and macros per serving (calories, protein, carbs, fat)`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
