@@ -24,11 +24,12 @@ export async function createPdfFromText(text, options = {}) {
   if (options.type === 'shoppingList') {
     const sections = text.split(/\n(?=\w+:)/); // Split by category heading
     sections.forEach(section => {
-      const [heading, ...items] = section.trim().split(/\n|,\s*/);
+      const lines = section.trim().split('\n');
+      const heading = lines.shift();
       doc.font('Helvetica-Bold').fontSize(13).text(heading.trim());
-      items.forEach(item => {
+      lines.forEach(item => {
         if (item.trim()) {
-          const cleanedItem = item.trim().replace(/^[-–]\s*/, '');
+          const cleanedItem = item.trim().replace(/^[-–]\s*/, '').replace(/^•\s*/, '');
           doc.font('Helvetica').fontSize(12).text('• ' + cleanedItem);
         }
       });
