@@ -27,12 +27,13 @@ export async function createPdfFromText(text, options = {}) {
       const lines = section.trim().split('\n');
       const heading = lines.shift();
       if (heading && heading.trim()) {
+        doc.moveDown(0.5);
         doc.font('Helvetica-Bold').fontSize(13).text(heading.trim());
       }
       lines.forEach(item => {
         const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
         if (cleanedItem) {
-          doc.font('Helvetica').fontSize(12).text('• ' + cleanedItem);
+          doc.font('Helvetica').fontSize(12).text('\u2022 ' + cleanedItem, { indent: 10 });
         }
       });
       doc.moveDown(1);
@@ -61,7 +62,7 @@ export async function createPdfFromText(text, options = {}) {
         const items = trimmed.replace(/^Ingredients:\s*/i, '').split(/[\,\n]+/);
         items.forEach(item => {
           if (item.trim()) {
-            doc.font('Helvetica').text('• ' + item.trim(), x, y, {
+            doc.font('Helvetica').text('\u2022 ' + item.trim(), x, y, {
               width: columnWidth,
               align: 'left'
             });
