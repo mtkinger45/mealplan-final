@@ -70,7 +70,8 @@ ${feedbackText}
 - Combine ingredient quantities across all meals.
 - Use clear US measurements (cups, oz, tbsp, tsp, lbs).
 - Group ingredients by category (e.g., Produce, Dairy, Meat, Freezer, Pantry, Spices, Other).
-- Omit items that the user already has listed under "Ingredients on hand".`;
+- Omit items that the user already has listed under "Ingredients on hand".
+- Do NOT prefix with dashes (-) or asterisks (*). Just use clean bullet points.`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -104,7 +105,8 @@ Each recipe should include:
 - Ingredients in list format with US quantities adjusted for ${householdSize} servings
 - Step-by-step instructions
 - Prep time, cook time, and macros per serving.
-- Make sure all meals have a recipe and do not use placeholders like '(continue...)'.`;
+- Make sure all meals have a recipe and do not use placeholders like '(continue...)'.
+- Remove asterisks around titles and return clean text.`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
