@@ -26,7 +26,7 @@ app.use(cors({
 app.use(bodyParser.json({ limit: '5mb' }));
 
 function stripHtmlAndAsterisks(text) {
-  return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1');
+  return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*/g, '');
 }
 
 async function generateMealPlanWithGPT(data) {
@@ -71,14 +71,14 @@ ${feedbackText}
 - Omit items that the user already has listed under "Ingredients on hand".
 - Format should be like:
   Produce:
-  - Onion – 3 medium
-  - Garlic – 5 cloves
+  • Onion – 3 medium
+  • Garlic – 5 cloves
 
   Meat:
-  - Chicken breast – 2 lbs
+  • Chicken breast – 2 lbs
 
 👩‍🍳 For "Recipe Summaries": include:
-- Ingredients with quantities
+- Ingredients in list format with quantities
 - Step-by-step instructions
 - Prep time, cook time, macros per serving.`;
 
