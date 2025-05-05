@@ -26,10 +26,12 @@ export async function createPdfFromText(text, options = {}) {
     sections.forEach(section => {
       const lines = section.trim().split('\n');
       const heading = lines.shift();
-      doc.font('Helvetica-Bold').fontSize(13).text(heading.trim());
+      if (heading && heading.trim()) {
+        doc.font('Helvetica-Bold').fontSize(13).text(heading.trim());
+      }
       lines.forEach(item => {
-        if (item.trim()) {
-          const cleanedItem = item.trim().replace(/^[-–]\s*/, '').replace(/^•\s*/, '');
+        const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
+        if (cleanedItem) {
           doc.font('Helvetica').fontSize(12).text('• ' + cleanedItem);
         }
       });
@@ -49,7 +51,6 @@ export async function createPdfFromText(text, options = {}) {
     lines.forEach((paragraph, i) => {
       const trimmed = paragraph.trim();
 
-      // Special handling for ingredients list
       if (/^Ingredients:/i.test(trimmed)) {
         doc.font('Helvetica-Bold').text('Ingredients:', x, y, {
           width: columnWidth,
