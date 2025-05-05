@@ -63,12 +63,24 @@ ${feedbackText}
 - Match QUICK meals on busy days (based on the user's calendar).
 - Avoid ingredients the user dislikes.
 - Make sure formatting is clear and the plan ends with a "Shopping List" and then "Recipe Summaries".
-- Use the weekday name alone on its own line for day headers (e.g., Monday).
-- In the "Recipe Summaries" section, include for each meal:
-  1. Ingredients with quantities using US measurements (cups, oz, tbsp, etc.)
-  2. Step-by-step cooking instructions using Fahrenheit for temperature and common American cooking terms
-  3. Include prep time, cook time, and macros per serving (calories, protein, carbs, fat)
-- In the "Shopping List", group ingredients by category (e.g., Produce, Dairy, Meat, Freezer, Pantry, Spices, Other), combine quantities, and omit items already listed in "Ingredients on hand".`;
+
+🛒 For the "Shopping List":
+- Combine ingredient quantities across all meals.
+- Use clear US measurements (cups, oz, tbsp, tsp, lbs).
+- Group ingredients by category (e.g., Produce, Dairy, Meat, Freezer, Pantry, Spices, Other).
+- Omit items that the user already has listed under "Ingredients on hand".
+- Format should be like:
+  Produce:
+  - Onion – 3 medium
+  - Garlic – 5 cloves
+
+  Meat:
+  - Chicken breast – 2 lbs
+
+👩‍🍳 For "Recipe Summaries": include:
+- Ingredients with quantities
+- Step-by-step instructions
+- Prep time, cook time, macros per serving.`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
