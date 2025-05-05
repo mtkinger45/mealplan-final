@@ -1,7 +1,6 @@
-// pdf.js
-import PDFDocument from 'pdfkit';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import PDFDocument from 'pdfkit';
 
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
@@ -11,9 +10,9 @@ const s3 = new S3Client({
   }
 });
 
-export async function createPdfFromText(text, options = {}) {
+export async function createPdfFromText(text) {
   console.log('[createPdfFromText] Generating PDF for content...');
-  const doc = new PDFDocument({ margin: 40 });
+  const doc = new PDFDocument();
   const buffers = [];
 
   doc.on('data', buffers.push.bind(buffers));
@@ -21,41 +20,19 @@ export async function createPdfFromText(text, options = {}) {
     console.log('[createPdfFromText] PDF generation complete.');
   });
 
-  if (options.layout === 'columns') {
-    doc.font('Helvetica');
-    const columnWidth = 250;
-    const gutter = 30;
-    const leftMargin = doc.page.margins.left;
-    const topMargin = doc.page.margins.top;
-
-    let x = leftMargin;
-    let y = topMargin;
-    const lines = text.split(/\n{2,}/);
-
-    lines.forEach((paragraph, i) => {
-      const heightBefore = doc.y;
-      doc.text(paragraph.trim(), x, y, {
-        width: columnWidth,
-        align: 'left'
-      });
-      y = doc.y + 15;
-      if (y + 100 > doc.page.height - doc.page.margins.bottom) {
-        if (x + columnWidth + gutter < doc.page.width - doc.page.margins.right) {
-          x += columnWidth + gutter;
-          y = topMargin;
-        } else {
-          doc.addPage();
-          x = leftMargin;
-          y = topMargin;
-        }
-      }
-    });
-  } else {
-    doc.font('Helvetica');
-    text.split('\n').forEach((line) => {
-      doc.text(line.trim()).moveDown(0.5);
-    });
-  }
+  const lines = text.split('\n');
+  lines.forEach((line, idx) => {
+    if (line.match(/^<b>.*<\/b>$/)) {
+      const clean = line.replace(/<\/?.?b>/g, '');
+      doc.font('Helvetica-Bold').fontSize(14).text(clean);
+    } else if (line.match(/^<i>.*<\/i>$/) || line.match(/^_.*_$/)) {
+      const clean = line.replace(/<\/?.?i>/g, '').replace(/^_(.*?)_$/, '$1');
+      doc.font('Helvetica-Oblique').fontSize(12).text(clean);
+    } else {
+      doc.font('Helvetica').fontSize(12).text(line);
+    }
+    if (idx < lines.length - 1) doc.moveDown(0.5);
+  });
 
   doc.end();
 
@@ -69,7 +46,6 @@ export async function createPdfFromText(text, options = {}) {
 
 export async function uploadPdfToS3(buffer, filename) {
   console.log(`[uploadPdfToS3] Uploading ${filename} to S3...`);
-
   const bucketName = process.env.AWS_BUCKET_NAME;
 
   const uploadCommand = new PutObjectCommand({
