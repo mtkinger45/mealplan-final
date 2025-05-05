@@ -71,11 +71,11 @@ ${feedbackText}
 - Omit items that the user already has listed under "Ingredients on hand".
 - Format should be like:
   Produce:
-  • Onion – 3 medium
-  • Garlic – 5 cloves
+  Onion – 3 medium
+  Garlic – 5 cloves
 
   Meat:
-  • Chicken breast – 2 lbs
+  Chicken breast – 2 lbs
 
 👩‍🍳 For "Recipe Summaries": include:
 - Ingredients in list format with quantities
@@ -89,7 +89,7 @@ ${feedbackText}
       { role: 'user', content: prompt }
     ],
     temperature: 0.7,
-    max_tokens: 2000
+    max_tokens: 5000
   });
 
   const result = completion.choices[0].message.content;
