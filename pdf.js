@@ -1,4 +1,4 @@
-// pdf.js
+
 import PDFDocument from 'pdfkit';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -35,7 +35,6 @@ export async function createPdfFromText(text, options = {}) {
     lines.forEach((paragraph, i) => {
       const trimmed = paragraph.trim();
 
-      // Special handling for ingredients list
       if (/^Ingredients:/i.test(trimmed)) {
         doc.font('Helvetica-Bold').text('Ingredients:', x, y, {
           width: columnWidth,
@@ -43,7 +42,7 @@ export async function createPdfFromText(text, options = {}) {
         });
         y = doc.y + 5;
 
-        const items = trimmed.split('\n').slice(1); // remove "Ingredients:" line
+        const items = trimmed.split('\n').slice(1);
         doc.font('Helvetica');
         items.forEach(item => {
           doc.text('• ' + item.trim(), x, y, {
