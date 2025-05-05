@@ -67,7 +67,8 @@ ${feedbackText}
 - In the "Recipe Summaries" section, include for each meal:
   1. Ingredients with quantities using US measurements (cups, oz, tbsp, etc.)
   2. Step-by-step cooking instructions using Fahrenheit for temperature and common American cooking terms
-  3. Include prep time, cook time, and macros per serving (calories, protein, carbs, fat)`;
+  3. Include prep time, cook time, and macros per serving (calories, protein, carbs, fat)
+  4. Use a two-column format where each recipe fills a single column.`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -112,7 +113,7 @@ app.post('/api/finalize', async (req, res) => {
     }
 
     const planPdfBuffer = await createPdfFromText(`Meal Plan for ${name}\n\n${mealPlan}`);
-    const recipesPdfBuffer = await createPdfFromText(`Recipes for ${name}\n\n${recipes}`);
+    const recipesPdfBuffer = await createPdfFromText(`Recipes for ${name}\n\n${recipes}`, { layout: 'columns' });
     const shoppingPdfBuffer = await createPdfFromText(`Shopping List for ${name}\n\n${shoppingList}`);
 
     const [planPdf, recipesPdf, shoppingPdf] = await Promise.all([
