@@ -28,7 +28,8 @@ export async function createPdfFromText(text, options = {}) {
       doc.font('Helvetica-Bold').fontSize(13).text(heading.trim());
       items.forEach(item => {
         if (item.trim()) {
-          doc.font('Helvetica').fontSize(12).text('• ' + item.trim());
+          const cleanedItem = item.trim().replace(/^[-–]\s*/, '');
+          doc.font('Helvetica').fontSize(12).text('• ' + cleanedItem);
         }
       });
       doc.moveDown(1);
