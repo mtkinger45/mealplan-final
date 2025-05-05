@@ -9,6 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// ✅ Allow only your frontend origin
 const allowedOrigins = ['https://login.gosocialfox.com'];
 
 app.use(cors({
@@ -24,19 +25,49 @@ app.use(cors({
 
 app.use(bodyParser.json({ limit: '5mb' }));
 
+function stripHtmlAndAsterisks(text) {
+  return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1');
+}
+
 async function generateMealPlanWithGPT(data) {
-  const prompt = `You are a professional meal planner. Based on the user's preferences below, create a ${data.duration || 7}-day meal plan. Each day should include: ${data.meals?.join(', ') || 'Supper'}.
+  const {
+    duration = 7,
+    meals = ['Supper'],
+    dietType = 'Any',
+    dietaryPreferences = 'None',
+    mealStyle = 'Any',
+    cookingRequests = 'None',
+    appliances = [],
+    onHandIngredients = 'None',
+    calendarInsights = 'None',
+    feedback = ''
+  } = data;
+
+  const feedbackText = feedback ? `NOTE: The user has requested this revision: "${feedback}". Please revise the new meal plan accordingly.` : '';
+
+  const prompt = `You are a professional meal planner. Based on the user's preferences, create a ${duration}-day meal plan. Each day should include the following meals: ${meals.join(', ')}.
 
 User info:
-Diet Type: ${data.dietType || 'Any'}
-Preferences: ${data.dietaryPreferences || 'None'}
-Cooking Style: ${data.mealStyle || 'Any'}
-Requests: ${data.cookingRequests || 'None'}
-Available Appliances: ${data.appliances?.join(', ') || 'None'}
-Ingredients on hand: ${data.onHandIngredients || 'None'}
-Schedule insights: ${data.calendarInsights || 'None'}
+- Diet Type: ${dietType}
+- Preferences: ${dietaryPreferences}
+- Cooking Style: ${mealStyle}
+- Special Requests: ${cookingRequests}
+- Available Appliances: ${appliances.join(', ') || 'None'}
+- Ingredients on hand: ${onHandIngredients}
+- Schedule insights: ${calendarInsights}
 
-Please format the meal plan clearly using markdown. At the end, include a shopping list and detailed recipe summaries (with step-by-step instructions, US measurements, estimated prep time, cook time, and basic macros).`;
+${feedbackText}
+
+🔁 Please:
+- Use weekday names (Monday–Sunday) in order, not 'Day 1', 'Day 2'.
+- Match QUICK meals on busy days (based on the user's calendar).
+- Avoid ingredients the user dislikes.
+- Make sure formatting is clear and the plan ends with a "Shopping List" and then "Recipe Summaries".
+- Use the weekday name alone on its own line for day headers (e.g., Monday).
+- In the "Recipe Summaries" section, include for each meal:
+  1. Ingredients with quantities using US measurements (cups, oz, tbsp, etc.)
+  2. Step-by-step cooking instructions using Fahrenheit for temperature and common American cooking terms
+  3. Include prep time, cook time, and macros per serving (calories, protein, carbs, fat)`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -45,16 +76,16 @@ Please format the meal plan clearly using markdown. At the end, include a shoppi
       { role: 'user', content: prompt }
     ],
     temperature: 0.7,
-    max_tokens: 2500
+    max_tokens: 2000
   });
 
   const result = completion.choices[0].message.content;
-  const [mealPlanPart, recipesPart, shoppingListPart] = result.split(/(?=Recipe|Shopping List)/i);
+  const [mealPlanPart, shoppingListPart, recipesPart] = result.split(/(?=Shopping List|Recipe Summaries)/i);
 
   return {
-    mealPlan: mealPlanPart.trim(),
-    recipes: (recipesPart || 'Recipes coming soon...').trim(),
-    shoppingList: (shoppingListPart || 'Shopping list coming soon...').trim(),
+    mealPlan: stripHtmlAndAsterisks(mealPlanPart?.trim() || ''),
+    shoppingList: stripHtmlAndAsterisks(shoppingListPart?.trim() || 'Shopping list coming soon...'),
+    recipes: stripHtmlAndAsterisks(recipesPart?.trim() || 'Recipes coming soon...')
   };
 }
 
@@ -81,7 +112,7 @@ app.post('/api/finalize', async (req, res) => {
     }
 
     const planPdfBuffer = await createPdfFromText(`Meal Plan for ${name}\n\n${mealPlan}`);
-    const recipesPdfBuffer = await createPdfFromText(`Recipes for ${name}\n\n${recipes}`, { layout: 'columns' });
+    const recipesPdfBuffer = await createPdfFromText(`Recipes for ${name}\n\n${recipes}`);
     const shoppingPdfBuffer = await createPdfFromText(`Shopping List for ${name}\n\n${shoppingList}`);
 
     const [planPdf, recipesPdf, shoppingPdf] = await Promise.all([
