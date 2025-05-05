@@ -29,7 +29,7 @@ function stripHtmlAndAsterisks(text) {
   return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*/g, '');
 }
 
-async function generateMealPlanWithGPT(data) {
+async function generateMealPlanAndShoppingList(data) {
   const {
     duration = 7,
     meals = ['Supper'],
@@ -40,7 +40,8 @@ async function generateMealPlanWithGPT(data) {
     appliances = [],
     onHandIngredients = 'None',
     calendarInsights = 'None',
-    feedback = ''
+    feedback = '',
+    householdSize = 4
   } = data;
 
   const feedbackText = feedback ? `NOTE: The user has requested this revision: "${feedback}". Please revise the new meal plan accordingly.` : '';
@@ -55,6 +56,7 @@ User info:
 - Available Appliances: ${appliances.join(', ') || 'None'}
 - Ingredients on hand: ${onHandIngredients}
 - Schedule insights: ${calendarInsights}
+- Household size: ${householdSize}
 
 ${feedbackText}
 
@@ -62,25 +64,13 @@ ${feedbackText}
 - Use weekday names (Monday–Sunday) in order, not 'Day 1', 'Day 2'.
 - Match QUICK meals on busy days (based on the user's calendar).
 - Avoid ingredients the user dislikes.
-- Make sure formatting is clear and the plan ends with a "Shopping List" and then "Recipe Summaries".
+- Make sure formatting is clear and the plan ends with a "Shopping List"
 
 🛒 For the "Shopping List":
 - Combine ingredient quantities across all meals.
 - Use clear US measurements (cups, oz, tbsp, tsp, lbs).
 - Group ingredients by category (e.g., Produce, Dairy, Meat, Freezer, Pantry, Spices, Other).
-- Omit items that the user already has listed under "Ingredients on hand".
-- Format should be like:
-  Produce:
-  Onion – 3 medium
-  Garlic – 5 cloves
-
-  Meat:
-  Chicken breast – 2 lbs
-
-👩‍🍳 For "Recipe Summaries": include:
-- Ingredients in list format with quantities
-- Step-by-step instructions
-- Prep time, cook time, macros per serving.`;
+- Omit items that the user already has listed under "Ingredients on hand".`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -89,27 +79,56 @@ ${feedbackText}
       { role: 'user', content: prompt }
     ],
     temperature: 0.7,
-    max_tokens: 5000
+    max_tokens: 4000
   });
 
   const result = completion.choices[0].message.content;
-  const [mealPlanPart, shoppingListPart, recipesPart] = result.split(/(?=Shopping List|Recipe Summaries)/i);
+  const [mealPlanPart, shoppingListPart] = result.split(/(?=Shopping List)/i);
 
   return {
     mealPlan: stripHtmlAndAsterisks(mealPlanPart?.trim() || ''),
-    shoppingList: stripHtmlAndAsterisks(shoppingListPart?.trim() || 'Shopping list coming soon...'),
-    recipes: stripHtmlAndAsterisks(recipesPart?.trim() || 'Recipes coming soon...')
+    shoppingList: stripHtmlAndAsterisks(shoppingListPart?.trim() || 'Shopping list coming soon...')
   };
+}
+
+async function generateRecipes(data, mealPlan) {
+  const { householdSize = 4 } = data;
+
+  const prompt = `You are a recipe developer. Based on the following meal plan, write complete recipes for each meal.
+
+Meal Plan:
+${mealPlan}
+
+Each recipe should include:
+- Title (bold)
+- Ingredients in list format with US quantities adjusted for ${householdSize} servings
+- Step-by-step instructions
+- Prep time, cook time, and macros per serving.
+- Make sure all meals have a recipe and do not use placeholders like '(continue...)'.`;
+
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [
+      { role: 'system', content: 'You are a professional recipe writer.' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.7,
+    max_tokens: 4000
+  });
+
+  return stripHtmlAndAsterisks(completion.choices[0].message.content);
 }
 
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
-    const gptResult = await generateMealPlanWithGPT(data);
+    const gptResult = await generateMealPlanAndShoppingList(data);
+    const recipes = await generateRecipes(data, gptResult.mealPlan);
+
     res.json({
       mealPlan: gptResult.mealPlan,
-      recipes: gptResult.recipes,
-      shoppingList: gptResult.shoppingList
+      shoppingList: gptResult.shoppingList,
+      recipes
     });
   } catch (err) {
     console.error(err);
