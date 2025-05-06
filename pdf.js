@@ -101,6 +101,9 @@ export async function createPdfFromText(text, options = {}) {
         y = doc.y + 15;
       }
     });
+
+    // Ensure we finalize any open content
+    doc.addPage();
   } else {
     doc.font('Helvetica');
     text.split('\n').forEach((line) => {
