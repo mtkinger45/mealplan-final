@@ -26,11 +26,15 @@ export async function createPdfFromText(text, options = {}) {
     sections.forEach(section => {
       const lines = section.trim().split('\n');
       const heading = lines.shift();
+
+      // Print bold heading without bullet
       if (heading && heading.trim()) {
         doc.moveDown(1);
-        doc.font('Helvetica-Bold').fontSize(14).text(heading.trim().replace(/^[-–•]\s*/, ''));
+        doc.font('Helvetica-Bold').fontSize(14).text(heading.trim().replace(/[:-]$/, ''));
         doc.moveDown(0.3);
       }
+
+      // Print each item as bullet
       lines.forEach(item => {
         const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
         if (cleanedItem) {
@@ -40,7 +44,8 @@ export async function createPdfFromText(text, options = {}) {
           });
         }
       });
-      doc.moveDown(1); // Add spacing between categories
+
+      doc.moveDown(1);
     });
   } else if (options.layout === 'columns') {
     doc.font('Helvetica');
@@ -54,6 +59,17 @@ export async function createPdfFromText(text, options = {}) {
     const lines = text.split(/\n{2,}/);
 
     lines.forEach((paragraph, i) => {
+      if (y + 100 > doc.page.height - doc.page.margins.bottom) {
+        if (x + columnWidth + gutter < doc.page.width - doc.page.margins.right) {
+          x += columnWidth + gutter;
+          y = topMargin;
+        } else {
+          doc.addPage();
+          x = leftMargin;
+          y = topMargin;
+        }
+      }
+
       const trimmed = paragraph.trim();
 
       if (/^Ingredients:/i.test(trimmed)) {
@@ -81,17 +97,6 @@ export async function createPdfFromText(text, options = {}) {
           align: 'left'
         });
         y = doc.y + 15;
-      }
-
-      if (y + 100 > doc.page.height - doc.page.margins.bottom) {
-        if (x + columnWidth + gutter < doc.page.width - doc.page.margins.right) {
-          x += columnWidth + gutter;
-          y = topMargin;
-        } else {
-          doc.addPage();
-          x = leftMargin;
-          y = topMargin;
-        }
       }
     });
   } else {
