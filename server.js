@@ -70,9 +70,14 @@ app.post('/api/mealplan', async (req, res) => {
 
 app.get('/api/pdf/mealplan', async (req, res) => {
   try {
+    const cleanedText = latestPlan.mealPlan
+      .replace(/^\*\*Meal Plan\*\*\n?/i, '')
+      .replace(/\*\*(.*?)\*\*/g, (_, day) => `\n<b>${day}</b>`) // Bold days
+      .replace(/^-\s*/gm, ''); // Remove dash before meals
+
     const pdf = await createPdfFromText(`Meal Plan for ${latestPlan.name}
 
-${latestPlan.mealPlan}`);
+${cleanedText}`);
     const url = await uploadPdfToS3(pdf, `${latestPlan.name}-plan.pdf`);
     res.json({ url });
   } catch (err) {
