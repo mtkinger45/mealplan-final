@@ -26,7 +26,7 @@ Schedule insights: ${data.calendarInsights || 'None'}
 Number of people: ${data.people || 'Not specified'}
 
 Please format clearly with:
-• Meal Plan section (Day-by-day with meals)
+• Meal Plan section (Weekday names: Monday through Sunday, not Day 1/2. Include note after day name if mentioned in Schedule Insights like "Sunday – Baseball Night")
 • Recipe section (one recipe per meal, with ingredients + instructions, prep & cook time, and macros)
 • Shopping List grouped by category with quantities.
 Use US measurements.`;
@@ -70,7 +70,9 @@ app.post('/api/mealplan', async (req, res) => {
 
 app.get('/api/pdf/mealplan', async (req, res) => {
   try {
-    const pdf = await createPdfFromText(`Meal Plan for ${latestPlan.name}\n\n${latestPlan.mealPlan}`);
+    const pdf = await createPdfFromText(`Meal Plan for ${latestPlan.name}
+
+${latestPlan.mealPlan}`);
     const url = await uploadPdfToS3(pdf, `${latestPlan.name}-plan.pdf`);
     res.json({ url });
   } catch (err) {
