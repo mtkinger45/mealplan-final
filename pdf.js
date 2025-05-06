@@ -22,26 +22,22 @@ export async function createPdfFromText(text, options = {}) {
   });
 
   if (options.type === 'shoppingList') {
-    const sections = text.split(/(?=^[A-Za-z ]+:)/m);
-    sections.forEach(section => {
-      const lines = section.trim().split('\n');
-      const headingLine = lines[0].trim();
-      const heading = headingLine.replace(/:$/, '');
+    const lines = text.split('\n');
+    let currentCategory = null;
 
-      // Render header
-      doc.moveDown(1);
-      doc.font('Helvetica-Bold').fontSize(13).text(heading);
-      doc.moveDown(0.5);
+    lines.forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
 
-      // Render each item on its own line without bullets
-      lines.slice(1).join(',').split(/,\s*/).forEach(item => {
-        const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
-        if (cleanedItem) {
-          doc.font('Helvetica').fontSize(12).text(cleanedItem);
-        }
-      });
-
-      doc.moveDown(1.5);
+      if (/^[A-Za-z ]+:$/.test(trimmed)) {
+        currentCategory = trimmed.replace(/:$/, '');
+        doc.moveDown(1);
+        doc.font('Helvetica-Bold').fontSize(13).text(currentCategory);
+        doc.moveDown(0.5);
+      } else {
+        const cleanedItem = trimmed.replace(/^[-–•]\s*/, '');
+        doc.font('Helvetica').fontSize(12).text(cleanedItem);
+      }
     });
   } else if (options.layout === 'columns') {
     doc.font('Helvetica');
