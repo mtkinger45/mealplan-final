@@ -26,7 +26,7 @@ Schedule insights: ${data.calendarInsights || 'None'}
 Number of people: ${data.people || 'Not specified'}
 
 Please format clearly with:
-• Meal Plan section (Weekday names: Monday through Sunday, not Day 1/2. Include note after day name if mentioned in Schedule Insights like "Sunday – Baseball Night")
+• Meal Plan section (Weekday names: Monday through Sunday, not 'Day 1/2'. Include note after day name if mentioned in Schedule Insights like "Sunday – Baseball Night")
 • Recipe section (one recipe per meal, with ingredients + instructions, prep & cook time, and macros)
 • Shopping List grouped by category with quantities.
 Use US measurements.`;
@@ -72,8 +72,9 @@ app.get('/api/pdf/mealplan', async (req, res) => {
   try {
     const cleanedText = latestPlan.mealPlan
       .replace(/^\*\*Meal Plan\*\*\n?/i, '')
-      .replace(/\*\*(.*?)\*\*/g, (_, day) => `\n<b>${day}</b>`) // Bold days
-      .replace(/^-\s*/gm, ''); // Remove dash before meals
+      .replace(/^\*\*([^\n]+?)\*\*/gm, (_, day) => `<b>${day}</b>`) // Bold days
+      .replace(/^\*\s*/gm, '') // Remove asterisk from meal lines
+      .replace(/^-\s*/gm, ''); // Also remove dashes if any
 
     const pdf = await createPdfFromText(`Meal Plan for ${latestPlan.name}
 
