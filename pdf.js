@@ -22,24 +22,29 @@ export async function createPdfFromText(text, options = {}) {
   });
 
   if (options.type === 'shoppingList') {
-    const lines = text.split('\n');
-    let currentCategory = null;
+  const lines = text.split('\n');
+  let isFirstCategory = true;
 
-    lines.forEach((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
 
-      if (/^[A-Za-z ]+:$/.test(trimmed)) {
-        currentCategory = trimmed.replace(/:$/, '');
-        doc.moveDown(1);
-        doc.font('Helvetica-Bold').fontSize(13).text(currentCategory);
-        doc.moveDown(0.5);
-      } else {
-        const cleanedItem = trimmed.replace(/^[-–•]\s*/, '');
-        doc.font('Helvetica').fontSize(12).text(cleanedItem);
+    if (/^[A-Za-z ]+:$/.test(trimmed)) {
+      if (!isFirstCategory) {
+        doc.moveDown(1); // Space before new category
       }
-    });
-  } else if (options.layout === 'columns') {
+      isFirstCategory = false;
+
+      const header = trimmed.replace(/:$/, '');
+      doc.font('Helvetica-Bold').fontSize(13).text(header);
+      doc.moveDown(0.5);
+    } else {
+      const cleaned = trimmed.replace(/^[-–•]\s*/, ''); // Remove bullets
+      doc.font('Helvetica').fontSize(12).text(cleaned);
+    }
+  });
+}
+ else if (options.layout === 'columns') {
     doc.font('Helvetica');
     const columnWidth = 250;
     const gutter = 30;
