@@ -1,4 +1,3 @@
-
 // pdf.js
 import PDFDocument from 'pdfkit';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
@@ -71,7 +70,13 @@ export async function createPdfFromText(text, options = {}) {
         }
       }
 
-      if (/^Ingredients:/i.test(trimmed)) {
+      if (/^\*.*\*$/g.test(trimmed)) {
+        doc.font('Helvetica-Bold').text(trimmed.replace(/\*/g, ''), x, y, {
+          width: columnWidth,
+          align: 'left'
+        });
+        y = doc.y + 10;
+      } else if (/^Ingredients:/i.test(trimmed)) {
         doc.font('Helvetica-Bold').text('Ingredients:', x, y, {
           width: columnWidth,
           align: 'left'
