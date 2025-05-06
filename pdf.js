@@ -34,7 +34,8 @@ export async function createPdfFromText(text, options = {}) {
       doc.moveDown(0.3);
 
       // Render each item on its own line
-      lines.slice(1).join(',').split(/,\s*/).forEach(item => {
+      const itemLine = lines.slice(1).join(',');
+      itemLine.split(/,\s*/).forEach(item => {
         const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
         if (cleanedItem) {
           doc.font('Helvetica').fontSize(12).text(cleanedItem);
@@ -101,9 +102,6 @@ export async function createPdfFromText(text, options = {}) {
         y = doc.y + 15;
       }
     });
-
-    // Ensure we finalize any open content
-    doc.addPage();
   } else {
     doc.font('Helvetica');
     text.split('\n').forEach((line) => {
