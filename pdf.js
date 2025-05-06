@@ -27,16 +27,19 @@ export async function createPdfFromText(text, options = {}) {
       const lines = section.trim().split('\n');
       const heading = lines.shift();
       if (heading && heading.trim()) {
-        doc.moveDown(0.5);
-        doc.font('Helvetica-Bold').fontSize(13).text(heading.trim());
+        doc.moveDown(1);
+        doc.font('Helvetica-Bold').fontSize(14).text(heading.trim());
+        doc.moveDown(0.3);
       }
       lines.forEach(item => {
         const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
         if (cleanedItem) {
-          doc.font('Helvetica').fontSize(12).text('\u2022 ' + cleanedItem, { indent: 10 });
+          doc.font('Helvetica').fontSize(12).text('\u2022 ' + cleanedItem, {
+            indent: 10,
+            paragraphGap: 2
+          });
         }
       });
-      doc.moveDown(1);
     });
   } else if (options.layout === 'columns') {
     doc.font('Helvetica');
