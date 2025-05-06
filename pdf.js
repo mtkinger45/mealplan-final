@@ -24,19 +24,19 @@ export async function createPdfFromText(text, options = {}) {
   if (options.type === 'shoppingList') {
     const sections = text.split(/(?=^[A-Za-z ]+:)/m);
     sections.forEach(section => {
-      const lines = section.trim().split(/\n+/);
+      const lines = section.trim().split('\n');
       const headingLine = lines[0].trim();
-      const heading = headingLine.endsWith(':') ? headingLine.slice(0, -1) : headingLine;
+      const heading = headingLine.replace(/:$/, '');
 
-      if (heading) {
-        doc.moveDown(0.5);
-        doc.font('Helvetica-Bold').fontSize(13).text(heading);
-        doc.moveDown(0.3);
-      }
+      // Render header
+      doc.moveDown(1);
+      doc.font('Helvetica-Bold').fontSize(13).text(heading);
+      doc.moveDown(0.5);
 
-      lines.slice(1).forEach(item => {
+      // Render bullet points
+      lines.slice(1).join(',').split(/,\s*/).forEach(item => {
         const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
-        if (cleanedItem && cleanedItem !== headingLine) {
+        if (cleanedItem) {
           doc.font('Helvetica').fontSize(12).text('\u2022 ' + cleanedItem, {
             indent: 10,
             paragraphGap: 2
@@ -44,7 +44,7 @@ export async function createPdfFromText(text, options = {}) {
         }
       });
 
-      doc.moveDown(0.5);
+      doc.moveDown(1);
     });
   } else if (options.layout === 'columns') {
     doc.font('Helvetica');
