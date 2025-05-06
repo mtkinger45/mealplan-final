@@ -1,3 +1,4 @@
+
 // server.js
 import express from 'express';
 import bodyParser from 'body-parser';
@@ -9,7 +10,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// ✅ Allow only your frontend origin
 const allowedOrigins = ['https://login.gosocialfox.com'];
 
 app.use(cors({
@@ -146,7 +146,7 @@ app.post('/api/finalize', async (req, res) => {
     }
 
     const planPdfBuffer = await createPdfFromText(`Meal Plan for ${name}\n\n${mealPlan}`);
-    const recipesPdfBuffer = await createPdfFromText(`Recipes for ${name}\n\n${recipes}`);
+    const recipesPdfBuffer = await createPdfFromText(`Recipes for ${name}\n\n${recipes}`, { layout: 'columns' });
     const shoppingPdfBuffer = await createPdfFromText(`Shopping List for ${name}\n\n${shoppingList}`, { type: 'shoppingList' });
 
     const [planPdf, recipesPdf, shoppingPdf] = await Promise.all([
