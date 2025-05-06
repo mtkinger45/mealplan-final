@@ -24,16 +24,17 @@ export async function createPdfFromText(text, options = {}) {
   if (options.type === 'shoppingList') {
     const sections = text.split(/(?=^[A-Za-z ]+:)/m);
     sections.forEach(section => {
-      const lines = section.trim().split('\n');
-      const heading = lines.shift();
+      const lines = section.trim().split(/\n+/);
+      const headingLine = lines[0].trim();
+      const heading = headingLine.endsWith(':') ? headingLine.slice(0, -1) : headingLine;
 
-      if (heading && heading.trim()) {
+      if (heading) {
         doc.moveDown(1);
-        doc.font('Helvetica-Bold').fontSize(14).text(heading.replace(/:$/, ''));
+        doc.font('Helvetica-Bold').fontSize(14).text(heading);
         doc.moveDown(0.3);
       }
 
-      lines.forEach(item => {
+      lines.slice(1).forEach(item => {
         const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
         if (cleanedItem) {
           doc.font('Helvetica').fontSize(12).text('\u2022 ' + cleanedItem, {
