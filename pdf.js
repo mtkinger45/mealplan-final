@@ -22,19 +22,17 @@ export async function createPdfFromText(text, options = {}) {
   });
 
   if (options.type === 'shoppingList') {
-    const sections = text.split(/\n(?=\w+:)/); // Split by category heading
+    const sections = text.split(/(?=^[A-Za-z ]+:)/m); // split by "Category:" at line start
     sections.forEach(section => {
       const lines = section.trim().split('\n');
       const heading = lines.shift();
 
-      // Print bold heading without bullet
       if (heading && heading.trim()) {
         doc.moveDown(1);
-        doc.font('Helvetica-Bold').fontSize(14).text(heading.trim().replace(/[:-]$/, ''));
+        doc.font('Helvetica-Bold').fontSize(14).text(heading.replace(/:$/, ''));
         doc.moveDown(0.3);
       }
 
-      // Print each item as bullet
       lines.forEach(item => {
         const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
         if (cleanedItem) {
@@ -44,7 +42,6 @@ export async function createPdfFromText(text, options = {}) {
           });
         }
       });
-
       doc.moveDown(1);
     });
   } else if (options.layout === 'columns') {
