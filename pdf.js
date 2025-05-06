@@ -31,9 +31,9 @@ export async function createPdfFromText(text, options = {}) {
       // Render header
       doc.moveDown(1);
       doc.font('Helvetica-Bold').fontSize(13).text(heading);
-      doc.moveDown(0.3);
+      doc.moveDown(0.5);
 
-      // Render each item on its own line
+      // Render each item on its own line without bullets
       lines.slice(1).join(',').split(/,\s*/).forEach(item => {
         const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
         if (cleanedItem) {
