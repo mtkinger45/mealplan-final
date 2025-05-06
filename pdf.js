@@ -28,11 +28,11 @@ export async function createPdfFromText(text, options = {}) {
       const heading = lines.shift();
       if (heading && heading.trim()) {
         doc.moveDown(1);
-        doc.font('Helvetica-Bold').fontSize(14).text(heading.trim());
+        doc.font('Helvetica-Bold').fontSize(14).text(heading.trim().replace(/^[-\u2013\u2022]\s*/, ''));
         doc.moveDown(0.3);
       }
       lines.forEach(item => {
-        const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
+        const cleanedItem = item.trim().replace(/^[-\u2013\u2022]\s*/, '');
         if (cleanedItem) {
           doc.font('Helvetica').fontSize(12).text('\u2022 ' + cleanedItem, {
             indent: 10,
