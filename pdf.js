@@ -22,29 +22,24 @@ export async function createPdfFromText(text, options = {}) {
   });
 
   if (options.type === 'shoppingList') {
-  const lines = text.split('\n');
-  let isFirstCategory = true;
+    const lines = text.split('\n');
+    let currentCategory = null;
 
-  lines.forEach((line) => {
-    const trimmed = line.trim();
-    if (!trimmed) return;
+    lines.forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
 
-    if (/^[A-Za-z ]+:$/.test(trimmed)) {
-      if (!isFirstCategory) {
-        doc.moveDown(1); // Space before new category
+      if (/^[A-Za-z ]+:$/.test(trimmed)) {
+        currentCategory = trimmed.replace(/:$/, '');
+        doc.moveDown(1);
+        doc.font('Helvetica-Bold').fontSize(13).text(currentCategory);
+        doc.moveDown(0.5);
+      } else {
+        const cleanedItem = trimmed.replace(/^[-–•]\s*/, '');
+        doc.font('Helvetica').fontSize(12).text(cleanedItem);
       }
-      isFirstCategory = false;
-
-      const header = trimmed.replace(/:$/, '');
-      doc.font('Helvetica-Bold').fontSize(13).text(header);
-      doc.moveDown(0.5);
-    } else {
-      const cleaned = trimmed.replace(/^[-–•]\s*/, ''); // Remove bullets
-      doc.font('Helvetica').fontSize(12).text(cleaned);
-    }
-  });
-}
- else if (options.layout === 'columns') {
+    });
+  } else if (options.layout === 'columns') {
     doc.font('Helvetica');
     const columnWidth = 250;
     const gutter = 30;
@@ -85,7 +80,7 @@ export async function createPdfFromText(text, options = {}) {
         const items = trimmed.replace(/^Ingredients:\s*/i, '').split(/[\,\n]+/);
         items.forEach(item => {
           if (item.trim()) {
-            doc.font('Helvetica').text('\u2022 ' + item.trim(), x, y, {
+            doc.font('Helvetica').text('• ' + item.trim(), x, y, {
               width: columnWidth,
               align: 'left'
             });
@@ -94,6 +89,35 @@ export async function createPdfFromText(text, options = {}) {
         });
 
         y += 10;
+      } else if (/^\s*-\s*\w+:\s+.+\(.+\)/.test(trimmed)) {
+        const match = trimmed.match(/^\s*-\s*(\w+):\s+(.+?)\s*\((.*?)\)$/);
+        if (match) {
+          const mealType = match[1];
+          const title = match[2];
+          const ingredients = match[3].split(',');
+
+          doc.font('Helvetica-Bold').text(`${mealType}: ${title}`, x, y, {
+            width: columnWidth,
+            align: 'left'
+          });
+          y = doc.y + 2;
+
+          ingredients.forEach(ingredient => {
+            doc.font('Helvetica').text('• ' + ingredient.trim(), x, y, {
+              width: columnWidth,
+              align: 'left'
+            });
+            y = doc.y + 2;
+          });
+
+          y += 8;
+        } else {
+          doc.font('Helvetica').text(trimmed, x, y, {
+            width: columnWidth,
+            align: 'left'
+          });
+          y = doc.y + 15;
+        }
       } else {
         doc.text(trimmed, x, y, {
           width: columnWidth,
