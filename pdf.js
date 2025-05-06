@@ -1,3 +1,4 @@
+
 // pdf.js
 import PDFDocument from 'pdfkit';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
@@ -43,7 +44,6 @@ export async function createPdfFromText(text, options = {}) {
         }
       });
 
-      // Add a space after each category section
       doc.moveDown(1);
     });
   } else if (options.layout === 'columns') {
