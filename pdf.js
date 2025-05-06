@@ -42,6 +42,8 @@ export async function createPdfFromText(text, options = {}) {
           });
         }
       });
+
+      // Add a space after each category section
       doc.moveDown(1);
     });
   } else if (options.layout === 'columns') {
