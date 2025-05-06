@@ -34,8 +34,7 @@ export async function createPdfFromText(text, options = {}) {
       doc.moveDown(0.3);
 
       // Render each item on its own line
-      const itemLine = lines.slice(1).join(',');
-      itemLine.split(/,\s*/).forEach(item => {
+      lines.slice(1).join(',').split(/,\s*/).forEach(item => {
         const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
         if (cleanedItem) {
           doc.font('Helvetica').fontSize(12).text(cleanedItem);
@@ -45,63 +44,7 @@ export async function createPdfFromText(text, options = {}) {
       doc.moveDown(1.5);
     });
   } else if (options.layout === 'columns') {
-    doc.font('Helvetica');
-    const columnWidth = 250;
-    const gutter = 30;
-    const leftMargin = doc.page.margins.left;
-    const topMargin = doc.page.margins.top;
-
-    let x = leftMargin;
-    let y = topMargin;
-    const lines = text.split(/\n{2,}/);
-
-    lines.forEach((paragraph, i) => {
-      const trimmed = paragraph.trim();
-
-      if (y + 100 > doc.page.height - doc.page.margins.bottom) {
-        if (x + columnWidth + gutter < doc.page.width - doc.page.margins.right) {
-          x += columnWidth + gutter;
-          y = topMargin;
-        } else {
-          doc.addPage();
-          x = leftMargin;
-          y = topMargin;
-        }
-      }
-
-      if (/^\*.*\*$/g.test(trimmed)) {
-        doc.font('Helvetica-Bold').text(trimmed.replace(/\*/g, ''), x, y, {
-          width: columnWidth,
-          align: 'left'
-        });
-        y = doc.y + 10;
-      } else if (/^Ingredients:/i.test(trimmed)) {
-        doc.font('Helvetica-Bold').text('Ingredients:', x, y, {
-          width: columnWidth,
-          align: 'left'
-        });
-        y = doc.y + 5;
-
-        const items = trimmed.replace(/^Ingredients:\s*/i, '').split(/[\,\n]+/);
-        items.forEach(item => {
-          if (item.trim()) {
-            doc.font('Helvetica').text('\u2022 ' + item.trim(), x, y, {
-              width: columnWidth,
-              align: 'left'
-            });
-            y = doc.y + 2;
-          }
-        });
-
-        y += 10;
-      } else {
-        doc.text(trimmed, x, y, {
-          width: columnWidth,
-          align: 'left'
-        });
-        y = doc.y + 15;
-      }
-    });
+    renderRecipeTextInColumns(doc, text);
   } else {
     doc.font('Helvetica');
     text.split('\n').forEach((line) => {
@@ -116,6 +59,66 @@ export async function createPdfFromText(text, options = {}) {
       const pdfBuffer = Buffer.concat(buffers);
       resolve(pdfBuffer);
     });
+  });
+}
+
+function renderRecipeTextInColumns(doc, text) {
+  doc.font('Helvetica');
+  const columnWidth = 250;
+  const gutter = 30;
+  const leftMargin = doc.page.margins.left;
+  const topMargin = doc.page.margins.top;
+
+  let x = leftMargin;
+  let y = topMargin;
+  const lines = text.split(/\n{2,}/);
+
+  lines.forEach((paragraph) => {
+    const trimmed = paragraph.trim();
+
+    if (y + 100 > doc.page.height - doc.page.margins.bottom) {
+      if (x + columnWidth + gutter < doc.page.width - doc.page.margins.right) {
+        x += columnWidth + gutter;
+        y = topMargin;
+      } else {
+        doc.addPage();
+        x = leftMargin;
+        y = topMargin;
+      }
+    }
+
+    if (/^\*.*\*$/g.test(trimmed)) {
+      doc.font('Helvetica-Bold').text(trimmed.replace(/\*/g, ''), x, y, {
+        width: columnWidth,
+        align: 'left'
+      });
+      y = doc.y + 10;
+    } else if (/^Ingredients:/i.test(trimmed)) {
+      doc.font('Helvetica-Bold').text('Ingredients:', x, y, {
+        width: columnWidth,
+        align: 'left'
+      });
+      y = doc.y + 5;
+
+      const items = trimmed.replace(/^Ingredients:\s*/i, '').split(/[\,\n]+/);
+      items.forEach(item => {
+        if (item.trim()) {
+          doc.font('Helvetica').text('\u2022 ' + item.trim(), x, y, {
+            width: columnWidth,
+            align: 'left'
+          });
+          y = doc.y + 2;
+        }
+      });
+
+      y += 10;
+    } else {
+      doc.text(trimmed, x, y, {
+        width: columnWidth,
+        align: 'left'
+      });
+      y = doc.y + 15;
+    }
   });
 }
 
