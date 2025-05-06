@@ -13,7 +13,7 @@ const s3 = new S3Client({
 
 export async function createPdfFromText(text, options = {}) {
   console.log('[createPdfFromText] Generating PDF for content...');
-  const doc = new PDFDocument({ margin: 40 });
+  const doc = new PDFDocument({ margin: 40, size: 'LETTER' });
   const buffers = [];
 
   doc.on('data', buffers.push.bind(buffers));
@@ -22,7 +22,7 @@ export async function createPdfFromText(text, options = {}) {
   });
 
   if (options.type === 'shoppingList') {
-    const sections = text.split(/(?=^[A-Za-z ]+:)/m); // split by "Category:" at line start
+    const sections = text.split(/(?=^[A-Za-z ]+:)/m);
     sections.forEach(section => {
       const lines = section.trim().split('\n');
       const heading = lines.shift();
@@ -56,6 +56,8 @@ export async function createPdfFromText(text, options = {}) {
     const lines = text.split(/\n{2,}/);
 
     lines.forEach((paragraph, i) => {
+      const trimmed = paragraph.trim();
+
       if (y + 100 > doc.page.height - doc.page.margins.bottom) {
         if (x + columnWidth + gutter < doc.page.width - doc.page.margins.right) {
           x += columnWidth + gutter;
@@ -66,8 +68,6 @@ export async function createPdfFromText(text, options = {}) {
           y = topMargin;
         }
       }
-
-      const trimmed = paragraph.trim();
 
       if (/^Ingredients:/i.test(trimmed)) {
         doc.font('Helvetica-Bold').text('Ingredients:', x, y, {
