@@ -33,14 +33,11 @@ export async function createPdfFromText(text, options = {}) {
       doc.font('Helvetica-Bold').fontSize(13).text(heading);
       doc.moveDown(0.5);
 
-      // Render bullet points
+      // Render plain lines (not bulleted)
       lines.slice(1).join(',').split(/,\s*/).forEach(item => {
         const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
         if (cleanedItem) {
-          doc.font('Helvetica').fontSize(12).text('\u2022 ' + cleanedItem, {
-            indent: 10,
-            paragraphGap: 2
-          });
+          doc.font('Helvetica').fontSize(12).text(cleanedItem);
         }
       });
 
