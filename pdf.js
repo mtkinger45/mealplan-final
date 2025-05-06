@@ -29,22 +29,22 @@ export async function createPdfFromText(text, options = {}) {
       const heading = headingLine.endsWith(':') ? headingLine.slice(0, -1) : headingLine;
 
       if (heading) {
-        doc.moveDown(1);
-        doc.font('Helvetica-Bold').fontSize(14).text(heading);
+        doc.moveDown(0.5);
+        doc.font('Helvetica-Bold').fontSize(13).text(heading);
         doc.moveDown(0.3);
       }
 
       lines.slice(1).forEach(item => {
         const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
-        if (cleanedItem) {
+        if (cleanedItem && cleanedItem !== headingLine) {
           doc.font('Helvetica').fontSize(12).text('\u2022 ' + cleanedItem, {
-            indent: 20,
+            indent: 10,
             paragraphGap: 2
           });
         }
       });
 
-      doc.moveDown(1);
+      doc.moveDown(0.5);
     });
   } else if (options.layout === 'columns') {
     doc.font('Helvetica');
