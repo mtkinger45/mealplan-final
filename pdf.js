@@ -33,7 +33,7 @@ export async function createPdfFromText(text, options = {}) {
       doc.font('Helvetica-Bold').fontSize(13).text(heading);
       doc.moveDown(0.5);
 
-      // Render plain lines (not bulleted)
+      // Render each item on its own line
       lines.slice(1).join(',').split(/,\s*/).forEach(item => {
         const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
         if (cleanedItem) {
@@ -41,7 +41,7 @@ export async function createPdfFromText(text, options = {}) {
         }
       });
 
-      doc.moveDown(1);
+      doc.moveDown(1.5);
     });
   } else if (options.layout === 'columns') {
     doc.font('Helvetica');
