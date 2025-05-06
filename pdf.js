@@ -22,22 +22,26 @@ export async function createPdfFromText(text, options = {}) {
   });
 
   if (options.type === 'shoppingList') {
-    const lines = text.split('\n');
-    let currentCategory = null;
+    const sections = text.split(/(?=^[A-Za-z ]+:)/m);
+    sections.forEach(section => {
+      const lines = section.trim().split('\n');
+      const headingLine = lines[0].trim();
+      const heading = headingLine.replace(/:$/, '');
 
-    lines.forEach((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
+      // Render header
+      doc.moveDown(1);
+      doc.font('Helvetica-Bold').fontSize(13).text(heading);
+      doc.moveDown(0.3);
 
-      if (/^[A-Za-z ]+:$/.test(trimmed)) {
-        currentCategory = trimmed.replace(/:$/, '');
-        doc.moveDown(1);
-        doc.font('Helvetica-Bold').fontSize(13).text(currentCategory);
-        doc.moveDown(0.5);
-      } else {
-        const cleanedItem = trimmed.replace(/^[-–•]\s*/, '');
-        doc.font('Helvetica').fontSize(12).text(cleanedItem);
-      }
+      // Render each item on its own line
+      lines.slice(1).join(',').split(/,\s*/).forEach(item => {
+        const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
+        if (cleanedItem) {
+          doc.font('Helvetica').fontSize(12).text(cleanedItem);
+        }
+      });
+
+      doc.moveDown(1.5);
     });
   } else if (options.layout === 'columns') {
     doc.font('Helvetica');
@@ -80,7 +84,7 @@ export async function createPdfFromText(text, options = {}) {
         const items = trimmed.replace(/^Ingredients:\s*/i, '').split(/[\,\n]+/);
         items.forEach(item => {
           if (item.trim()) {
-            doc.font('Helvetica').text('• ' + item.trim(), x, y, {
+            doc.font('Helvetica').text('\u2022 ' + item.trim(), x, y, {
               width: columnWidth,
               align: 'left'
             });
