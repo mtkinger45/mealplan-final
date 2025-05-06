@@ -72,7 +72,7 @@ app.get('/api/pdf/mealplan', async (req, res) => {
   try {
     const cleanedText = latestPlan.mealPlan
       .replace(/^\*\*Meal Plan\*\*\n?/i, '')
-      .replace(/^\*\*([^\n]+?)\*\*/gm, (_, day) => `<b>${day}</b>`) // Bold days
+      .replace(/^\*\*([^\n]+?)\*\*/gm, (_, day) => `\n<b>${day}</b>`) // Bold days
       .replace(/^\*\s*/gm, '') // Remove asterisk from meal lines
       .replace(/^-\s*/gm, ''); // Also remove dashes if any
 
