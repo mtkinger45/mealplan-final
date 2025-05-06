@@ -31,7 +31,7 @@ export async function createPdfFromText(text, options = {}) {
       // Render header
       doc.moveDown(1);
       doc.font('Helvetica-Bold').fontSize(13).text(heading);
-      doc.moveDown(0.5);
+      doc.moveDown(0.3);
 
       // Render each item on its own line
       lines.slice(1).join(',').split(/,\s*/).forEach(item => {
