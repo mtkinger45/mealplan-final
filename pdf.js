@@ -89,35 +89,6 @@ export async function createPdfFromText(text, options = {}) {
         });
 
         y += 10;
-      } else if (/^\s*-\s*\w+:\s+.+\(.+\)/.test(trimmed)) {
-        const match = trimmed.match(/^\s*-\s*(\w+):\s+(.+?)\s*\((.*?)\)$/);
-        if (match) {
-          const mealType = match[1];
-          const title = match[2];
-          const ingredients = match[3].split(',');
-
-          doc.font('Helvetica-Bold').text(`${mealType}: ${title}`, x, y, {
-            width: columnWidth,
-            align: 'left'
-          });
-          y = doc.y + 2;
-
-          ingredients.forEach(ingredient => {
-            doc.font('Helvetica').text('• ' + ingredient.trim(), x, y, {
-              width: columnWidth,
-              align: 'left'
-            });
-            y = doc.y + 2;
-          });
-
-          y += 8;
-        } else {
-          doc.font('Helvetica').text(trimmed, x, y, {
-            width: columnWidth,
-            align: 'left'
-          });
-          y = doc.y + 15;
-        }
       } else {
         doc.text(trimmed, x, y, {
           width: columnWidth,
