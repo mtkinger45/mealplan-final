@@ -1,4 +1,3 @@
-
 // server.js
 import express from 'express';
 import bodyParser from 'body-parser';
@@ -138,27 +137,45 @@ app.post('/api/mealplan', async (req, res) => {
   }
 });
 
-app.post('/api/finalize', async (req, res) => {
+app.post('/api/pdf/mealplan', async (req, res) => {
   try {
-    const { name = 'Guest', mealPlan, recipes, shoppingList } = req.body;
-    if (!mealPlan || !recipes || !shoppingList) {
-      return res.status(400).json({ error: 'Missing meal plan data.' });
-    }
+    const { name = 'Guest', mealPlan } = req.body;
+    const planPdfBuffer = await createPdfFromText(`Meal Plan for ${name}
 
-    const planPdfBuffer = await createPdfFromText(`Meal Plan for ${name}\n\n${mealPlan}`);
-    const recipesPdfBuffer = await createPdfFromText(`Recipes for ${name}\n\n${recipes}`, { layout: 'columns' });
-    const shoppingPdfBuffer = await createPdfFromText(`Shopping List for ${name}\n\n${shoppingList}`, { type: 'shoppingList' });
-
-    const [planPdf, recipesPdf, shoppingPdf] = await Promise.all([
-      uploadPdfToS3(planPdfBuffer, `${name}-plan.pdf`),
-      uploadPdfToS3(recipesPdfBuffer, `${name}-recipes.pdf`),
-      uploadPdfToS3(shoppingPdfBuffer, `${name}-shopping.pdf`)
-    ]);
-
-    res.json({ planPdf, recipesPdf, shoppingPdf });
+${mealPlan}`);
+    const planPdf = await uploadPdfToS3(planPdfBuffer, `${name}-plan.pdf`);
+    res.json({ planPdf });
   } catch (err) {
-    console.error('Error in /api/finalize:', err.message, err.stack);
-    res.status(500).json({ error: 'Failed to generate PDFs.' });
+    console.error('Error generating meal plan PDF:', err.message);
+    res.status(500).json({ error: 'Failed to generate meal plan PDF.' });
+  }
+});
+
+app.post('/api/pdf/recipes', async (req, res) => {
+  try {
+    const { name = 'Guest', recipes } = req.body;
+    const recipesPdfBuffer = await createPdfFromText(`Recipes for ${name}
+
+${recipes}`, { layout: 'columns' });
+    const recipesPdf = await uploadPdfToS3(recipesPdfBuffer, `${name}-recipes.pdf`);
+    res.json({ recipesPdf });
+  } catch (err) {
+    console.error('Error generating recipes PDF:', err.message);
+    res.status(500).json({ error: 'Failed to generate recipes PDF.' });
+  }
+});
+
+app.post('/api/pdf/shopping-list', async (req, res) => {
+  try {
+    const { name = 'Guest', shoppingList } = req.body;
+    const shoppingPdfBuffer = await createPdfFromText(`Shopping List for ${name}
+
+${shoppingList}`, { type: 'shoppingList' });
+    const shoppingPdf = await uploadPdfToS3(shoppingPdfBuffer, `${name}-shopping.pdf`);
+    res.json({ shoppingPdf });
+  } catch (err) {
+    console.error('Error generating shopping list PDF:', err.message);
+    res.status(500).json({ error: 'Failed to generate shopping list PDF.' });
   }
 });
 
