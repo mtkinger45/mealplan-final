@@ -82,19 +82,19 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
     } else if (/^Ingredients:/i.test(trimmed)) {
       doc.font('Helvetica-Bold').text('Ingredients:');
       doc.moveDown(0.25);
-      const items = trimmed.replace(/^Ingredients:\s*/i, '').split(/[;,\n]+/);
+      const items = trimmed.replace(/^Ingredients:\s*/i, '').split(/,\s*/);
       items.forEach(item => {
         if (item.trim()) {
-          doc.font('Helvetica').text(item.trim());
+          doc.font('Helvetica').fontSize(12).text(item.trim());
         }
       });
       doc.moveDown(1);
     } else if (/^Instructions:/i.test(trimmed)) {
       doc.font('Helvetica-Bold').text('Instructions:');
-      const steps = trimmed.replace(/^Instructions:\s*/i, '').split(/(?<=\.)\s+/);
+      const steps = trimmed.replace(/^Instructions:\s*/i, '').split(/\n+/).map((line, i) => `${i + 1}. ${line.trim()}`);
       steps.forEach(step => {
         if (step.trim()) {
-          doc.font('Helvetica').text(step.trim());
+          doc.font('Helvetica').fontSize(12).text(step.trim());
         }
       });
       doc.moveDown(1);
