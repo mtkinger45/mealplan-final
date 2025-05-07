@@ -63,18 +63,20 @@ export async function createPdfFromText(text, options = {}) {
 function renderRecipeTextInSingleColumn(doc, text, options = {}) {
   const lines = text.split(/\n{2,}/);
   doc.font('Helvetica');
+
   lines.forEach(paragraph => {
     const trimmed = paragraph.trim();
-    if (/^\*.*\*$/g.test(trimmed)) {
-      doc.font('Helvetica-Bold').text(trimmed.replace(/\*/g, ''));
+
+    if (/^\*{1,2}.*\*{1,2}$/.test(trimmed)) {
+      doc.font('Helvetica-Bold').text(trimmed.replace(/\*{1,2}/g, ''));
       doc.moveDown(0.5);
     } else if (/^Ingredients:/i.test(trimmed)) {
       doc.font('Helvetica-Bold').text('Ingredients:');
       doc.moveDown(0.25);
-      const items = trimmed.replace(/^Ingredients:\s*/i, '').split(/[\,\n]+/);
+      const items = trimmed.replace(/^Ingredients:\s*/i, '').split(/,\s*/);
       items.forEach(item => {
         if (item.trim()) {
-          doc.font('Helvetica').text('\u2022 ' + item.trim());
+          doc.font('Helvetica').text('• ' + item.trim());
         }
       });
       doc.moveDown(1);
@@ -107,4 +109,3 @@ export async function uploadPdfToS3(buffer, filename) {
   const url = await getSignedUrl(s3, getCommand, { expiresIn: 3600 });
   return url;
 }
-
