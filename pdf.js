@@ -73,7 +73,7 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
   lines.forEach(paragraph => {
     const trimmed = paragraph.trim();
 
-    if (/^(Breakfast|Lunch|Supper):\s*\*{1,2}.*\*{1,2}$/.test(trimmed)) {
+    if (/^(Breakfast|Lunch|Supper):\s*\*{1,2}(.*?)\*{1,2}$/.test(trimmed)) {
       const match = trimmed.match(/^(Breakfast|Lunch|Supper):\s*\*{1,2}(.*?)\*{1,2}$/);
       const mealType = match[1];
       const title = match[2];
@@ -82,7 +82,8 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
     } else if (/^Ingredients:/i.test(trimmed)) {
       doc.font('Helvetica-Bold').text('Ingredients:');
       doc.moveDown(0.25);
-      const items = trimmed.replace(/^Ingredients:\s*/i, '').split(/[;,\n]+/);
+      const items = trimmed.replace(/^Ingredients:\s*/i, '').split(/[;,
+]+/);
       items.forEach(item => {
         if (item.trim()) {
           doc.font('Helvetica').text(item.trim());
@@ -91,7 +92,7 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
       doc.moveDown(1);
     } else if (/^Instructions:/i.test(trimmed)) {
       doc.font('Helvetica-Bold').text('Instructions:');
-      const steps = trimmed.replace(/^Instructions:\s*/i, '').split(/\d+\./).filter(Boolean);
+      const steps = trimmed.replace(/^Instructions:\s*/i, '').split(/(?<=\.)\s+/);
       steps.forEach(step => {
         if (step.trim()) {
           doc.font('Helvetica').text(step.trim());
