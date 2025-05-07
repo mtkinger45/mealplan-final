@@ -46,10 +46,14 @@ export async function createPdfFromText(text, options = {}) {
   } else if (options.layout === 'columns') {
     renderRecipeTextInColumns(doc, text);
   } else {
-    doc.font('Helvetica');
     text.split('\n').forEach((line) => {
-      doc.text(line.trim()).moveDown(0.5);
-    });
+  if (line.startsWith('<b>') && line.endsWith('</b>')) {
+    const day = line.replace(/<\/?b>/g, '').trim();
+    doc.font('Helvetica-Bold').fontSize(13).text(day).moveDown(0.5);
+  } else {
+    doc.font('Helvetica').fontSize(12).text(line.trim()).moveDown(0.5);
+  }
+});
   }
 
   doc.end();
