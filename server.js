@@ -14,33 +14,23 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '5mb' }));
 
 async function generateMealPlanWithGPT(data) {
-  let prompt = `You are a professional meal planner. Based on the user's preferences below, create a \${data.duration || 7}-day meal plan. Each day should include: \${data.meals?.join(', ') || 'Supper'}.
+  const prompt = `You are a professional meal planner. Based on the user's preferences below, create a ${data.duration || 7}-day meal plan. Each day should include: ${data.meals?.join(', ') || 'Supper'}.
 
 User info:
-Diet Type: \${data.dietType || 'Any'}
-Preferences: \${data.dietaryPreferences || 'None'}
-Cooking Style: \${data.mealStyle || 'Any'}
-Requests: \${data.cookingRequests || 'None'}
-Available Appliances: \${data.appliances?.join(', ') || 'None'}
-Ingredients on hand: \${data.onHandIngredients || 'None'}
-Schedule insights: \${data.calendarInsights || 'None'}
-Number of people: \${data.people || 'Not specified'}
+Diet Type: ${data.dietType || 'Any'}
+Preferences: ${data.dietaryPreferences || 'None'}
+Cooking Style: ${data.mealStyle || 'Any'}
+Requests: ${data.cookingRequests || 'None'}
+Available Appliances: ${data.appliances?.join(', ') || 'None'}
+Ingredients on hand: ${data.onHandIngredients || 'None'}
+Schedule insights: ${data.calendarInsights || 'None'}
+Number of people: ${data.people || 'Not specified'}
 
 Please format clearly with:
 • Meal Plan section (Weekday names: Monday through Sunday, not 'Day 1/2'. Include note after day name if mentioned in Schedule Insights like "Sunday – Baseball Night")
 • Recipe section (one recipe per meal, with ingredients + instructions, prep & cook time, and macros)
 • Shopping List grouped by category with quantities.
-Use US measurements.\`;
-
-  if (data.feedback && data.previousMealPlan) {
-    prompt += \`
-
-📝 The user provided this feedback: "\${data.feedback}"
-Please regenerate the plan using the original as context but adapt it to follow the feedback.
-Original Meal Plan:
-\${data.previousMealPlan}
-\`;
-  }
+Use US measurements.`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -67,10 +57,6 @@ let latestPlan = {};
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
-    if (data.feedback && latestPlan.mealPlan) {
-      data.previousMealPlan = latestPlan.mealPlan;
-    }
-
     const gptResult = await generateMealPlanWithGPT(data);
     latestPlan = {
       name: data.name || 'Guest',
