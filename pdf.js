@@ -77,12 +77,12 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
       const match = trimmed.match(/^(Breakfast|Lunch|Supper):\s*\*{1,2}(.*?)\*{1,2}$/);
       const mealType = match[1];
       const title = match[2];
-      doc.font('Helvetica-Bold').fontSize(14).text(`${mealType}: ${title}`);
+      doc.font('Helvetica-Bold').fontSize(16).text(`${mealType}: ${title}`);
       doc.moveDown(0.5);
     } else if (/^Ingredients:/i.test(trimmed)) {
       doc.font('Helvetica-Bold').text('Ingredients:');
       doc.moveDown(0.25);
-      const items = trimmed.replace(/^Ingredients:\s*/i, '').split(/[;\n,]+/);
+      const items = trimmed.replace(/^Ingredients:\s*/i, '').split(/[;,\n]+/);
       items.forEach(item => {
         if (item.trim()) {
           doc.font('Helvetica').text(item.trim());
@@ -91,7 +91,13 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
       doc.moveDown(1);
     } else if (/^Instructions:/i.test(trimmed)) {
       doc.font('Helvetica-Bold').text('Instructions:');
-      doc.moveDown(0.25);
+      const steps = trimmed.replace(/^Instructions:\s*/i, '').split(/\d+\./).filter(Boolean);
+      steps.forEach(step => {
+        if (step.trim()) {
+          doc.font('Helvetica').text(step.trim());
+        }
+      });
+      doc.moveDown(1);
     } else if (/^Prep & Cook Time:/i.test(trimmed)) {
       doc.font('Helvetica-Bold').text('Prep & Cook Time:');
       doc.font('Helvetica').text(trimmed.replace(/^Prep & Cook Time:\s*/i, ''));
