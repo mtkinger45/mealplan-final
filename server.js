@@ -14,7 +14,7 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '5mb' }));
 
 async function generateMealPlanWithGPT(data) {
-  let prompt = \`You are a professional meal planner. Based on the user's preferences below, create a \${data.duration || 7}-day meal plan. Each day should include: \${data.meals?.join(', ') || 'Supper'}.
+  let prompt = `You are a professional meal planner. Based on the user's preferences below, create a \${data.duration || 7}-day meal plan. Each day should include: \${data.meals?.join(', ') || 'Supper'}.
 
 User info:
 Diet Type: \${data.dietType || 'Any'}
