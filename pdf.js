@@ -75,7 +75,7 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
     const titleMatch = line.match(/^(Breakfast|Lunch|Supper):\s*(.*)$/);
     if (titleMatch) {
       const meal = titleMatch[1];
-      const recipeName = titleMatch[2];
+      const recipeName = titleMatch[2].replace(/\*\*/g, '');
       doc.moveDown(1);
       doc.font('Helvetica-Bold').fontSize(14).text(`${meal}: ${recipeName}`);
       doc.moveDown(0.5);
@@ -84,17 +84,10 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
 
     if (/^Ingredients:/i.test(line)) {
       doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
-      i++;
-      while (i < lines.length && lines[i].trim() && !/^Instructions:/i.test(lines[i])) {
-        const raw = lines[i].replace(/^[-•]\s*/, '').trim();
-        raw.split(/,\s*/).forEach(item => {
-          if (item) {
-            doc.font('Helvetica').fontSize(12).text(item.trim());
-          }
-        });
-        i++;
-      }
-      i--;
+      const items = line.replace(/^Ingredients:\s*/i, '').split(/,\s*/);
+      items.forEach(item => {
+        doc.font('Helvetica').fontSize(12).text(item.trim());
+      });
       doc.moveDown(0.5);
       continue;
     }
@@ -127,7 +120,7 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
     if (/^Macros:/i.test(line)) {
       doc.font('Helvetica-Bold').fontSize(12).text('Macros:');
       doc.font('Helvetica').fontSize(12).text(line.replace(/^Macros:\s*/i, ''));
-      doc.moveDown(2);
+      doc.moveDown(1.25);
       continue;
     }
 
