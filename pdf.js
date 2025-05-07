@@ -28,12 +28,10 @@ export async function createPdfFromText(text, options = {}) {
       const headingLine = lines[0].trim();
       const heading = headingLine.replace(/:$/, '');
 
-      // Render header
       doc.moveDown(1);
       doc.font('Helvetica-Bold').fontSize(13).text(heading);
       doc.moveDown(0.3);
 
-      // Render each item on its own line
       lines.slice(1).join(',').split(/,\s*/).forEach(item => {
         const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
         if (cleanedItem) {
@@ -44,16 +42,12 @@ export async function createPdfFromText(text, options = {}) {
       doc.moveDown(1.5);
     });
   } else if (options.layout === 'columns') {
-    renderRecipeTextInColumns(doc, text);
+    renderRecipeTextInColumns(doc, text, options);
   } else {
+    doc.font('Helvetica');
     text.split('\n').forEach((line) => {
-  if (line.startsWith('<b>') && line.endsWith('</b>')) {
-    const day = line.replace(/<\/?b>/g, '').trim();
-    doc.font('Helvetica-Bold').fontSize(13).text(day).moveDown(0.5);
-  } else {
-    doc.font('Helvetica').fontSize(12).text(line.trim()).moveDown(0.5);
-  }
-});
+      doc.text(line.trim()).moveDown(0.5);
+    });
   }
 
   doc.end();
@@ -66,7 +60,7 @@ export async function createPdfFromText(text, options = {}) {
   });
 }
 
-function renderRecipeTextInColumns(doc, text) {
+function renderRecipeTextInColumns(doc, text, options = {}) {
   doc.font('Helvetica');
   const columnWidth = 250;
   const gutter = 30;
@@ -91,7 +85,7 @@ function renderRecipeTextInColumns(doc, text) {
       }
     }
 
-    if (/^\*.*\*$/g.test(trimmed)) {
+    if (/^\*.*\*$/g.test(trimmed) && options.boldHeadingsOnly) {
       doc.font('Helvetica-Bold').text(trimmed.replace(/\*/g, ''), x, y, {
         width: columnWidth,
         align: 'left'
@@ -117,7 +111,7 @@ function renderRecipeTextInColumns(doc, text) {
 
       y += 10;
     } else {
-      doc.text(trimmed, x, y, {
+      doc.font('Helvetica').text(trimmed, x, y, {
         width: columnWidth,
         align: 'left'
       });
