@@ -82,8 +82,7 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
     } else if (/^Ingredients:/i.test(trimmed)) {
       doc.font('Helvetica-Bold').text('Ingredients:');
       doc.moveDown(0.25);
-      const items = trimmed.replace(/^Ingredients:\s*/i, '').split(/[;,
-]+/);
+      const items = trimmed.replace(/^Ingredients:\s*/i, '').split(/[;,\n]+/);
       items.forEach(item => {
         if (item.trim()) {
           doc.font('Helvetica').text(item.trim());
