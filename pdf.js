@@ -73,9 +73,11 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
   lines.forEach(paragraph => {
     const trimmed = paragraph.trim();
 
-    if (/^\*{1,2}.*\*{1,2}$/.test(trimmed)) {
-      const title = trimmed.replace(/^\*{1,2}/, '').replace(/\*{1,2}$/, '');
-      doc.font('Helvetica-Bold').fontSize(13).text(title);
+    if (/^(Breakfast|Lunch|Supper):\s*\*{1,2}.*\*{1,2}$/.test(trimmed)) {
+      const match = trimmed.match(/^(Breakfast|Lunch|Supper):\s*\*{1,2}(.*?)\*{1,2}$/);
+      const mealType = match[1];
+      const title = match[2];
+      doc.font('Helvetica-Bold').fontSize(14).text(`${mealType}: ${title}`);
       doc.moveDown(0.5);
     } else if (/^Ingredients:/i.test(trimmed)) {
       doc.font('Helvetica-Bold').text('Ingredients:');
