@@ -46,7 +46,13 @@ export async function createPdfFromText(text, options = {}) {
   } else {
     doc.font('Helvetica');
     text.split('\n').forEach((line) => {
-      doc.text(line.trim()).moveDown(0.5);
+      const trimmed = line.trim();
+      if (/^<b>.*<\/b>$/.test(trimmed)) {
+        const clean = trimmed.replace(/<\/?b>/g, '');
+        doc.font('Helvetica-Bold').text(clean).moveDown(0.5);
+      } else {
+        doc.font('Helvetica').text(trimmed).moveDown(0.5);
+      }
     });
   }
 
@@ -73,10 +79,10 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
     } else if (/^Ingredients:/i.test(trimmed)) {
       doc.font('Helvetica-Bold').text('Ingredients:');
       doc.moveDown(0.25);
-      const items = trimmed.replace(/^Ingredients:\s*/i, '').split(/,\s*/);
+      const items = trimmed.replace(/^Ingredients:\s*/i, '').split(/[\,\n]+/);
       items.forEach(item => {
         if (item.trim()) {
-          doc.font('Helvetica').text('• ' + item.trim());
+          doc.font('Helvetica').text('\u2022 ' + item.trim());
         }
       });
       doc.moveDown(1);
