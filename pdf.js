@@ -74,7 +74,8 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
     const trimmed = paragraph.trim();
 
     if (/^\*{1,2}.*\*{1,2}$/.test(trimmed)) {
-      doc.font('Helvetica-Bold').text(trimmed.replace(/\*{1,2}/g, ''));
+      const title = trimmed.replace(/^\*{1,2}/, '').replace(/\*{1,2}$/, '');
+      doc.font('Helvetica-Bold').text(title);
       doc.moveDown(0.5);
     } else if (/^Ingredients:/i.test(trimmed)) {
       doc.font('Helvetica-Bold').text('Ingredients:');
@@ -85,6 +86,15 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
           doc.font('Helvetica').text('\u2022 ' + item.trim());
         }
       });
+      doc.moveDown(1);
+    } else if (/^Instructions:/i.test(trimmed)) {
+      doc.font('Helvetica-Bold').text('Instructions:');
+      doc.moveDown(0.25);
+    } else if (/^Prep & Cook Time:/i.test(trimmed)) {
+      doc.font('Helvetica').text(trimmed);
+      doc.moveDown(0.25);
+    } else if (/^Macros:/i.test(trimmed)) {
+      doc.font('Helvetica').text(trimmed);
       doc.moveDown(1);
     } else {
       doc.font('Helvetica').text(trimmed);
