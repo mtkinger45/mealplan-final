@@ -48,7 +48,7 @@ export async function createPdfFromText(text, options = {}) {
     text.split('\n').forEach((line) => {
       const trimmed = line.trim();
       if (/^<b>.*<\/b>$/.test(trimmed)) {
-        const clean = trimmed.replace(/<\/?b>/g, '');
+        const clean = trimmed.replace(/<\/?.*?>/g, '');
         doc.font('Helvetica-Bold').text(clean).moveDown(0.5);
       } else {
         doc.font('Helvetica').text(trimmed).moveDown(0.5);
@@ -68,50 +68,49 @@ export async function createPdfFromText(text, options = {}) {
 
 function renderRecipeTextInSingleColumn(doc, text, options = {}) {
   const lines = text.split('\n');
-  let currentMeal = '';
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
 
-    // Detect and format title
-    const titleMatch = line.match(/^(Breakfast|Lunch|Supper):\s*\*\*(.*?)\*\*$/);
+    // Match format: Meal: Recipe Name
+    const titleMatch = line.match(/^(Breakfast|Lunch|Supper):\s*(.*)$/);
     if (titleMatch) {
-      currentMeal = titleMatch[1];
-      const title = titleMatch[2];
+      const meal = titleMatch[1];
+      const recipeName = titleMatch[2];
       doc.moveDown(1);
-      doc.font('Helvetica-Bold').fontSize(14).text(`${currentMeal}: ${title}`);
+      doc.font('Helvetica-Bold').fontSize(14).text(`${meal}: ${recipeName}`);
       doc.moveDown(0.5);
       continue;
     }
 
     if (/^Ingredients:/i.test(line)) {
       doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
-      const ingredientLines = [];
       i++;
       while (i < lines.length && lines[i].trim() && !/^Instructions:/i.test(lines[i])) {
-        ingredientLines.push(lines[i].replace(/^[-•]\s*/, '').trim());
+        const ingLine = lines[i].replace(/^[-•]\s*/, '').trim();
+        if (ingLine) {
+          doc.font('Helvetica').fontSize(12).text(ingLine);
+        }
         i++;
       }
-      i--; // step back since outer loop also increments
-      ingredientLines.forEach(ing => {
-        doc.font('Helvetica').fontSize(12).text(ing);
-      });
+      i--; // backtrack
       doc.moveDown(0.5);
       continue;
     }
 
     if (/^Instructions:/i.test(line)) {
       doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
-      const instructions = [];
       i++;
       while (i < lines.length && lines[i].trim() && !/^Prep & Cook Time:/i.test(lines[i]) && !/^Macros:/i.test(lines[i])) {
-        instructions.push(lines[i].trim());
+        const stepMatch = lines[i].trim().match(/^\d+\.\s*(.*)$/);
+        if (stepMatch) {
+          doc.font('Helvetica').fontSize(12).text(`${stepMatch[0]}`);
+        } else {
+          doc.font('Helvetica').fontSize(12).text(lines[i].trim());
+        }
         i++;
       }
       i--;
-      instructions.forEach(inst => {
-        doc.font('Helvetica').fontSize(12).text(inst);
-      });
       doc.moveDown(0.5);
       continue;
     }
@@ -130,7 +129,6 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
       continue;
     }
 
-    // Fallback
     doc.font('Helvetica').fontSize(12).text(line);
   }
 }
