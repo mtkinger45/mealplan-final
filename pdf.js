@@ -48,7 +48,7 @@ export async function createPdfFromText(text, options = {}) {
     text.split('\n').forEach((line) => {
       const trimmed = line.trim();
       if (/^<b>.*<\/b>$/.test(trimmed)) {
-        const clean = trimmed.replace(/<\/?.*?>/g, '');
+        const clean = trimmed.replace(/<\/?b>/g, '');
         doc.font('Helvetica-Bold').text(clean).moveDown(0.5);
       } else {
         doc.font('Helvetica').text(trimmed).moveDown(0.5);
@@ -87,9 +87,9 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
       doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
       i++;
       while (i < lines.length && lines[i].trim() && !/^Instructions:/i.test(lines[i])) {
-        const ingLine = lines[i].replace(/^[-•]\s*/, '').trim();
-        if (ingLine) {
-          doc.font('Helvetica').fontSize(12).text(ingLine);
+        const items = lines[i].replace(/^[-•]\s*/, '').split(/,\s*/);
+        for (const item of items) {
+          doc.font('Helvetica').fontSize(12).text(item.trim());
         }
         i++;
       }
@@ -102,9 +102,9 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
       doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
       i++;
       while (i < lines.length && lines[i].trim() && !/^Prep & Cook Time:/i.test(lines[i]) && !/^Macros:/i.test(lines[i])) {
-        const stepMatch = lines[i].trim().match(/^\d+\.\s*(.*)$/);
+        const stepMatch = lines[i].trim().match(/^(\d+)\.\s*(.*)$/);
         if (stepMatch) {
-          doc.font('Helvetica').fontSize(12).text(`${stepMatch[0]}`);
+          doc.font('Helvetica').fontSize(12).text(`${stepMatch[1]}. ${stepMatch[2]}`);
         } else {
           doc.font('Helvetica').fontSize(12).text(lines[i].trim());
         }
