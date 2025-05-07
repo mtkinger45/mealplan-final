@@ -42,7 +42,7 @@ export async function createPdfFromText(text, options = {}) {
       doc.moveDown(1.5);
     });
   } else if (options.layout === 'columns') {
-    renderRecipeTextInColumns(doc, text, options);
+    renderRecipeTextInSingleColumn(doc, text, options);
   } else {
     doc.font('Helvetica');
     text.split('\n').forEach((line) => {
@@ -60,62 +60,27 @@ export async function createPdfFromText(text, options = {}) {
   });
 }
 
-function renderRecipeTextInColumns(doc, text, options = {}) {
-  doc.font('Helvetica');
-  const columnWidth = 250;
-  const gutter = 30;
-  const leftMargin = doc.page.margins.left;
-  const topMargin = doc.page.margins.top;
-
-  let x = leftMargin;
-  let y = topMargin;
+function renderRecipeTextInSingleColumn(doc, text, options = {}) {
   const lines = text.split(/\n{2,}/);
-
-  lines.forEach((paragraph) => {
+  doc.font('Helvetica');
+  lines.forEach(paragraph => {
     const trimmed = paragraph.trim();
-
-    if (y + 100 > doc.page.height - doc.page.margins.bottom) {
-      if (x + columnWidth + gutter < doc.page.width - doc.page.margins.right) {
-        x += columnWidth + gutter;
-        y = topMargin;
-      } else {
-        doc.addPage();
-        x = leftMargin;
-        y = topMargin;
-      }
-    }
-
-    if (/^\*.*\*$/g.test(trimmed) && options.boldHeadingsOnly) {
-      doc.font('Helvetica-Bold').text(trimmed.replace(/\*/g, ''), x, y, {
-        width: columnWidth,
-        align: 'left'
-      });
-      y = doc.y + 10;
+    if (/^\*.*\*$/g.test(trimmed)) {
+      doc.font('Helvetica-Bold').text(trimmed.replace(/\*/g, ''));
+      doc.moveDown(0.5);
     } else if (/^Ingredients:/i.test(trimmed)) {
-      doc.font('Helvetica-Bold').text('Ingredients:', x, y, {
-        width: columnWidth,
-        align: 'left'
-      });
-      y = doc.y + 5;
-
+      doc.font('Helvetica-Bold').text('Ingredients:');
+      doc.moveDown(0.25);
       const items = trimmed.replace(/^Ingredients:\s*/i, '').split(/[\,\n]+/);
       items.forEach(item => {
         if (item.trim()) {
-          doc.font('Helvetica').text('\u2022 ' + item.trim(), x, y, {
-            width: columnWidth,
-            align: 'left'
-          });
-          y = doc.y + 2;
+          doc.font('Helvetica').text('\u2022 ' + item.trim());
         }
       });
-
-      y += 10;
+      doc.moveDown(1);
     } else {
-      doc.font('Helvetica').text(trimmed, x, y, {
-        width: columnWidth,
-        align: 'left'
-      });
-      y = doc.y + 15;
+      doc.font('Helvetica').text(trimmed);
+      doc.moveDown(1);
     }
   });
 }
