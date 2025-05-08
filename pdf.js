@@ -88,7 +88,7 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
         doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
         const ingredients = [];
         i++;
-        while (i < lines.length && lines[i].trim() && !/^Instructions:/i.test(lines[i])) {
+        while (i < lines.length && lines[i].trim() && !/^Instructions:/i.test(lines[i]) && !/^Prep & Cook Time:/i.test(lines[i]) && !/^Macros:/i.test(lines[i])) {
           ingredients.push(lines[i].trim());
           i++;
         }
@@ -118,14 +118,16 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
 
       if (/^Prep & Cook Time:/i.test(line)) {
         doc.font('Helvetica-Bold').fontSize(12).text('Prep & Cook Time:');
-        doc.font('Helvetica').fontSize(12).text(line.replace(/^Prep & Cook Time:\s*/i, ''));
+        const time = line.replace(/^Prep & Cook Time:\s*/i, '');
+        doc.font('Helvetica').fontSize(12).text(time);
         doc.moveDown(0.25);
         continue;
       }
 
       if (/^Macros:/i.test(line)) {
         doc.font('Helvetica-Bold').fontSize(12).text('Macros:');
-        doc.font('Helvetica').fontSize(12).text(line.replace(/^Macros:\s*/i, ''));
+        const macros = line.replace(/^Macros:\s*/i, '');
+        doc.font('Helvetica').fontSize(12).text(macros);
         doc.moveDown(1.25);
         continue;
       }
