@@ -87,7 +87,7 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
       const items = line.replace(/^Ingredients:\s*/i, '').split(/,\s*/);
       items.forEach(item => {
         doc.font('Helvetica').fontSize(12).text(item.trim());
-});
+ });
       doc.moveDown(0.5);
       continue;
     }
