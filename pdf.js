@@ -67,13 +67,17 @@ export async function createPdfFromText(text, options = {}) {
 }
 
 function renderRecipeTextInSingleColumn(doc, text, options = {}) {
-  const blocks = text.split(/(?=^(Breakfast|Lunch|Supper):)/m);
+  const lines = text.trim().split('\n');
+  let currentRecipe = [];
 
-  for (let block of blocks) {
-    const lines = block.trim().split('\n');
+  function renderCurrentRecipe() {
+    if (currentRecipe.length === 0) return;
+
+    const block = currentRecipe.join('\n');
+    const recipeLines = block.trim().split('\n');
     let meal = '', recipeName = '', startIdx = 0;
 
-    const titleMatch = lines[0]?.match(/^(Breakfast|Lunch|Supper):\s*(.*)$/);
+    const titleMatch = recipeLines[0]?.match(/^(Breakfast|Lunch|Supper):\s*(.*)$/);
     if (titleMatch) {
       meal = titleMatch[1];
       recipeName = titleMatch[2].replace(/\*\*/g, '');
@@ -83,8 +87,8 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
       startIdx = 1;
     }
 
-    for (let i = startIdx; i < lines.length; i++) {
-      const line = lines[i].trim();
+    for (let i = startIdx; i < recipeLines.length; i++) {
+      const line = recipeLines[i].trim();
 
       if (/^Ingredients:/i.test(line)) {
         doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
@@ -100,8 +104,8 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
       if (/^Instructions:/i.test(line)) {
         doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
         i++;
-        while (i < lines.length && lines[i].trim() && !/^Prep & Cook Time:/i.test(lines[i]) && !/^Macros:/i.test(lines[i])) {
-          const instructionLine = lines[i].trim();
+        while (i < recipeLines.length && recipeLines[i].trim() && !/^Prep & Cook Time:/i.test(recipeLines[i]) && !/^Macros:/i.test(recipeLines[i])) {
+          const instructionLine = recipeLines[i].trim();
           const stepMatch = instructionLine.match(/^(\d+)\.\s*(.*)$/);
           if (stepMatch) {
             doc.font('Helvetica').fontSize(12).text(`${stepMatch[1]}. ${stepMatch[2]}`);
@@ -131,7 +135,16 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
 
       doc.font('Helvetica').fontSize(12).text(line);
     }
+    currentRecipe = [];
   }
+
+  for (let line of lines) {
+    if (/^(Breakfast|Lunch|Supper):/.test(line.trim())) {
+      renderCurrentRecipe();
+    }
+    currentRecipe.push(line);
+  }
+  renderCurrentRecipe();
 }
 
 function clarifyIngredient(item) {
