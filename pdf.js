@@ -67,66 +67,70 @@ export async function createPdfFromText(text, options = {}) {
 }
 
 function renderRecipeTextInSingleColumn(doc, text, options = {}) {
-  const lines = text.split('\n');
+  const recipes = text.split(/(?=^(Breakfast|Lunch|Supper):)/m);
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
+  recipes.forEach(recipeText => {
+    const lines = recipeText.trim().split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
 
-    const titleMatch = line.match(/^(Breakfast|Lunch|Supper):\s*(.*)$/);
-    if (titleMatch) {
-      const meal = titleMatch[1];
-      const recipeName = titleMatch[2].replace(/\*\*/g, '');
-      doc.moveDown(1);
-      doc.font('Helvetica-Bold').fontSize(14).text(`${meal}: ${recipeName}`);
-      doc.moveDown(0.5);
-      continue;
-    }
-
-    if (/^Ingredients:/i.test(line)) {
-      doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
-      const items = line.replace(/^Ingredients:\s*/i, '').split(/,\s*/);
-      items.forEach(item => {
-        doc.font('Helvetica').fontSize(12).text(item.trim());
- });
-      doc.moveDown(0.5);
-      continue;
-    }
-
-    if (/^Instructions:/i.test(line)) {
-      doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
-      i++;
-      while (i < lines.length && lines[i].trim() && !/^Prep & Cook Time:/i.test(lines[i]) && !/^Macros:/i.test(lines[i])) {
-        const instructionLine = lines[i].trim();
-        const stepMatch = instructionLine.match(/^(\d+)\.\s*(.*)$/);
-        if (stepMatch) {
-          doc.font('Helvetica').fontSize(12).text(`${stepMatch[1]}. ${stepMatch[2]}`);
-        } else {
-          doc.font('Helvetica').fontSize(12).text(instructionLine);
-        }
-        i++;
+      const titleMatch = line.match(/^(Breakfast|Lunch|Supper):\s*(.*)$/);
+      if (titleMatch) {
+        const meal = titleMatch[1];
+        const recipeName = titleMatch[2].replace(/\*\*/g, '');
+        doc.moveDown(1);
+        doc.font('Helvetica-Bold').fontSize(14).text(`${meal}: ${recipeName}`);
+        doc.moveDown(0.5);
+        continue;
       }
-      i--;
-      doc.moveDown(0.5);
-      continue;
-    }
 
-    if (/^Prep & Cook Time:/i.test(line)) {
-      doc.font('Helvetica-Bold').fontSize(12).text('Prep & Cook Time:');
-      doc.font('Helvetica').fontSize(12).text(line.replace(/^Prep & Cook Time:\s*/i, ''));
-      doc.moveDown(0.25);
-      continue;
-    }
+      if (/^Ingredients:/i.test(line)) {
+        doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
+        const items = line.replace(/^Ingredients:\s*/i, '').split(/,\s*/);
+        items.forEach(item => {
+          doc.font('Helvetica').fontSize(12).text(item.trim());
+        });
+        doc.moveDown(0.5);
+        continue;
+      }
 
-    if (/^Macros:/i.test(line)) {
-      doc.font('Helvetica-Bold').fontSize(12).text('Macros:');
-      doc.font('Helvetica').fontSize(12).text(line.replace(/^Macros:\s*/i, ''));
-      doc.moveDown(1.25);
-      continue;
-    }
+      if (/^Instructions:/i.test(line)) {
+        doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
+        i++;
+        while (i < lines.length && lines[i].trim() && !/^Prep & Cook Time:/i.test(lines[i]) && !/^Macros:/i.test(lines[i])) {
+          const instructionLine = lines[i].trim();
+          const stepMatch = instructionLine.match(/^(\d+)\.\s*(.*)$/);
+          if (stepMatch) {
+            doc.font('Helvetica').fontSize(12).text(`${stepMatch[1]}. ${stepMatch[2]}`);
+          } else {
+            doc.font('Helvetica').fontSize(12).text(instructionLine);
+          }
+          i++;
+        }
+        i--;
+        doc.moveDown(0.5);
+        continue;
+      }
 
-    doc.font('Helvetica').fontSize(12).text(line);
-  }
+      if (/^Prep & Cook Time:/i.test(line)) {
+        doc.font('Helvetica-Bold').fontSize(12).text('Prep & Cook Time:');
+        doc.font('Helvetica').fontSize(12).text(line.replace(/^Prep & Cook Time:\s*/i, ''));
+        doc.moveDown(0.25);
+        continue;
+      }
+
+      if (/^Macros:/i.test(line)) {
+        doc.font('Helvetica-Bold').fontSize(12).text('Macros:');
+        doc.font('Helvetica').fontSize(12).text(line.replace(/^Macros:\s*/i, ''));
+        doc.moveDown(1.25);
+        continue;
+      }
+
+      doc.font('Helvetica').fontSize(12).text(line);
+    }
+  });
 }
+
 export async function uploadPdfToS3(buffer, filename) {
   console.log(`[uploadPdfToS3] Uploading ${filename} to S3...`);
 
