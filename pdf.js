@@ -86,7 +86,8 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
       doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
       const items = line.replace(/^Ingredients:\s*/i, '').split(/,\s*/);
       items.forEach(item => {
-        doc.font('Helvetica').fontSize(12).text(item.trim());
+        const clarifiedItem = clarifyIngredient(item.trim());
+        doc.font('Helvetica').fontSize(12).text(clarifiedItem);
       });
       doc.moveDown(0.5);
       continue;
@@ -126,6 +127,14 @@ function renderRecipeTextInSingleColumn(doc, text, options = {}) {
 
     doc.font('Helvetica').fontSize(12).text(line);
   }
+}
+
+function clarifyIngredient(item) {
+  const match = item.match(/^1\s*lb\s*beef/i);
+  if (match) {
+    return item.replace(/^1\s*lb\s*beef/i, '1 lb ground beef');
+  }
+  return item;
 }
 
 export async function uploadPdfToS3(buffer, filename) {
