@@ -1,194 +1,137 @@
-// server.js
+// server.js with caching
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
+import { v4 as uuidv4 } from 'uuid';
+import { createPdfFromText, uploadPdfToS3 } from './pdf.js';
 import OpenAI from 'openai';
-import {
-  createPdfFromText,
-  uploadPdfToS3,
-  generateSessionId,
-  saveJsonToDisk,
-  loadJsonFromDisk
-} from './pdf.js';
+import fs from 'fs/promises';
+import path from 'path';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const cacheDir = './cache';
 
-const allowedOrigins = [
-  'https://login.gosocialfox.com',
-  'https://thechaostoconfidencecollective.com'
-];
+await fs.mkdir(cacheDir, { recursive: true });
 
-
+const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS not allowed from this origin'));
-    }
+    if (!origin || allowedOrigins.includes(origin)) callback(null, true);
+    else callback(new Error('CORS not allowed from this origin'));
   },
   credentials: true
 }));
 
 app.use(bodyParser.json({ limit: '5mb' }));
 
-function stripFormatting(text) {
-  return text
-    .replace(/<b>(.*?)<\/b>/g, '$1')
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/\*/g, '');
+function stripHtml(text) {
+  return text.replace(/<[^>]*>/g, '').replace(/\*\*/g, '').trim();
 }
 
-async function generateMealPlanAndShoppingList(data) {
-  const {
-    duration = 7,
-    meals = ['Supper'],
-    dietType = 'Any',
-    dietaryPreferences = 'None',
-    mealStyle = 'Any',
-    cookingRequests = 'None',
-    appliances = [],
-    onHandIngredients = 'None',
-    calendarInsights = 'None',
-    feedback = '',
-    householdSize = 4
-  } = data;
-
-  const feedbackText = feedback ? `NOTE: The user has requested this revision: "${feedback}".` : '';
-
-  const prompt = `You are a professional meal planner. Based on the user's preferences, create a ${duration}-day meal plan. Each day should include: ${meals.join(', ') || 'Supper'}.
-
-User info:
-- Diet Type: ${dietType}
-- Preferences: ${dietaryPreferences}
-- Cooking Style: ${mealStyle}
-- Special Requests: ${cookingRequests}
-- Available Appliances: ${appliances.join(', ') || 'None'}
-- Ingredients on hand: ${onHandIngredients}
-- Schedule insights: ${calendarInsights}
-- Household size: ${householdSize}
-
-${feedbackText}
-
-🔁 Requirements:
-- Use weekday names (Monday–Sunday) in order, not 'Day 1', 'Day 2'.
-- Match QUICK meals on busy days based on calendar insights.
-- Avoid ingredients the user dislikes.
-- Format clearly. End with a "Shopping List"
-
-🛒 Shopping List:
-- Combine ingredient quantities.
-- Use US measurements (cups, oz, tbsp, tsp, lbs).
-- Group ingredients by category.
-- Remove items the user already has.
-- Do NOT prefix with dashes or asterisks.`;
-
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4',
-    messages: [
-      { role: 'system', content: 'You are a professional meal planner.' },
-      { role: 'user', content: prompt }
-    ],
-    temperature: 0.7,
-    max_tokens: 4000
-  });
-
-  const result = completion.choices[0].message.content;
-  const [mealPlanPart, shoppingListPart] = result.split(/(?=Shopping List)/i);
-
-  return {
-    mealPlan: stripFormatting(mealPlanPart?.trim() || ''),
-    shoppingList: stripFormatting(shoppingListPart?.trim() || 'Shopping list coming soon...')
-  };
+function getSessionPath(sessionId) {
+  return path.join(cacheDir, `${sessionId}.json`);
 }
 
-async function generateRecipes(data, mealPlan) {
-  const { householdSize = 4 } = data;
+async function saveToCache(sessionId, data) {
+  const filePath = getSessionPath(sessionId);
+  await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+}
 
-  const prompt = `You are a recipe developer. Based on the following meal plan, write complete recipes for each meal.
-
-Meal Plan:
-${mealPlan}
-
-Each recipe must include:
-- Meal type (Breakfast, Lunch, or Supper)
-- Title (bolded)
-- Ingredients in a list (1 per line) with US quantities scaled to ${householdSize} servings
-- Instructions (step-by-step with numbers on same line as instruction)
-- Prep & Cook Time
-- Macros (carbs, fat, protein)
-- Do not use placeholders. Do not wrap titles in asterisks.`;
-
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4',
-    messages: [
-      { role: 'system', content: 'You are a professional recipe writer.' },
-      { role: 'user', content: prompt }
-    ],
-    temperature: 0.7,
-    max_tokens: 4000
-  });
-
-  return stripFormatting(completion.choices[0].message.content);
+async function loadFromCache(sessionId) {
+  const filePath = getSessionPath(sessionId);
+  const content = await fs.readFile(filePath, 'utf8');
+  return JSON.parse(content);
 }
 
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
-    const sessionId = generateSessionId();
+    const sessionId = uuidv4();
+    const feedbackNote = data.feedback ? `User feedback: "${data.feedback}"` : '';
 
-    const gptResult = await generateMealPlanAndShoppingList(data);
-    const recipes = await generateRecipes(data, gptResult.mealPlan);
+    const prompt = `You are a professional meal planner. Create a ${data.duration || 7}-day meal plan with ${data.meals?.join(', ') || 'Supper'}.
 
-    await saveJsonToDisk({ ...data, ...gptResult, recipes }, sessionId);
+Diet: ${data.dietType}
+Preferences: ${data.dietaryPreferences}
+Style: ${data.mealStyle}
+Requests: ${data.cookingRequests}
+Appliances: ${data.appliances?.join(', ')}
+On Hand: ${data.onHandIngredients}
+Schedule: ${data.calendarInsights}
+People: ${data.people || 4}
+${feedbackNote}
 
-    res.json({
-      sessionId,
-      mealPlan: gptResult.mealPlan,
-      shoppingList: gptResult.shoppingList,
-      recipes
+Use US measurements. Bold each day. Avoid placeholder text. End with "Shopping List:" grouped by category and excluding on-hand items.`;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        { role: 'system', content: 'You are a professional meal planner.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 4000
     });
+
+    const output = completion.choices[0].message.content;
+    const [mealPlan, shoppingList] = output.split(/(?=Shopping List:)/i);
+
+    const recipePrompt = `Write complete recipes based on the meal plan:
+${stripHtml(mealPlan)}
+
+Each recipe should include:
+- Title
+- Ingredients in US units
+- Instructions
+- Prep and Cook Time
+- Macros per serving
+Avoid placeholder text.`;
+
+    const recipeCompletion = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        { role: 'system', content: 'You are a recipe writer.' },
+        { role: 'user', content: recipePrompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 4000
+    });
+
+    const recipes = recipeCompletion.choices[0].message.content;
+    const result = {
+      sessionId,
+      mealPlan: stripHtml(mealPlan),
+      shoppingList: stripHtml(shoppingList),
+      recipes: stripHtml(recipes)
+    };
+
+    await saveToCache(sessionId, result);
+    res.json(result);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error generating meal plan.' });
   }
 });
 
-app.post('/api/pdf/:type', async (req, res) => {
+app.get('/api/pdf/:sessionId', async (req, res) => {
   try {
-    const { sessionId, name = 'Guest' } = req.body;
-    const { type } = req.params;
+    const sessionId = req.params.sessionId;
+    const data = await loadFromCache(sessionId);
+    const name = data.name || 'Guest';
 
-    const data = await loadJsonFromDisk(sessionId);
-    if (!data) return res.status(404).json({ error: 'Session not found.' });
+    const [planPdf, recipesPdf, shoppingPdf] = await Promise.all([
+      createPdfFromText(`Meal Plan for ${name}\n\n${data.mealPlan}`).then(buffer => uploadPdfToS3(buffer, `${sessionId}-plan.pdf`)),
+      createPdfFromText(`Recipes for ${name}\n\n${data.recipes}`, { layout: 'columns' }).then(buffer => uploadPdfToS3(buffer, `${sessionId}-recipes.pdf`)),
+      createPdfFromText(`Shopping List for ${name}\n\n${data.shoppingList}`, { type: 'shoppingList' }).then(buffer => uploadPdfToS3(buffer, `${sessionId}-shopping.pdf`))
+    ]);
 
-    let content;
-    let options = {};
-    if (type === 'mealplan') {
-      content = `Meal Plan for ${name}\n\n${data.mealPlan}`;
-    } else if (type === 'recipes') {
-      content = `Recipes for ${name}\n\n${data.recipes}`;
-      options.layout = 'columns';
-    } else if (type === 'shopping-list') {
-      content = `Shopping List for ${name}\n\n${data.shoppingList}`;
-      options.type = 'shoppingList';
-    } else {
-      return res.status(400).json({ error: 'Invalid type' });
-    }
-
-    const buffer = await createPdfFromText(content, options);
-    const key = `${name}-${type}.pdf`;
-    const url = await uploadPdfToS3(buffer, key);
-
-    res.json({ url });
+    res.json({ planPdf, recipesPdf, shoppingPdf });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'PDF generation failed.' });
+    console.error('PDF Error:', err);
+    res.status(500).json({ error: 'Could not generate PDFs.' });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
