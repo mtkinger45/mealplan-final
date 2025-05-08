@@ -3,33 +3,83 @@ import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
 import OpenAI from 'openai';
-import { createPdfFromText, uploadPdfToS3 } from './pdf.js';
+import {
+  createPdfFromText,
+  uploadPdfToS3,
+  generateSessionId,
+  saveJsonToDisk,
+  loadJsonFromDisk
+} from './pdf.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-app.use(cors());
+const allowedOrigins = ['https://login.gosocialfox.com'];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS not allowed from this origin'));
+    }
+  },
+  credentials: true
+}));
+
 app.use(bodyParser.json({ limit: '5mb' }));
 
-async function generateMealPlanWithGPT(data) {
-  const prompt = `You are a professional meal planner. Based on the user's preferences below, create a ${data.duration || 7}-day meal plan. Each day should include: ${data.meals?.join(', ') || 'Supper'}.
+function stripFormatting(text) {
+  return text
+    .replace(/<b>(.*?)<\/b>/g, '$1')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*/g, '');
+}
+
+async function generateMealPlanAndShoppingList(data) {
+  const {
+    duration = 7,
+    meals = ['Supper'],
+    dietType = 'Any',
+    dietaryPreferences = 'None',
+    mealStyle = 'Any',
+    cookingRequests = 'None',
+    appliances = [],
+    onHandIngredients = 'None',
+    calendarInsights = 'None',
+    feedback = '',
+    householdSize = 4
+  } = data;
+
+  const feedbackText = feedback ? `NOTE: The user has requested this revision: "${feedback}".` : '';
+
+  const prompt = `You are a professional meal planner. Based on the user's preferences, create a ${duration}-day meal plan. Each day should include: ${meals.join(', ') || 'Supper'}.
 
 User info:
-Diet Type: ${data.dietType || 'Any'}
-Preferences: ${data.dietaryPreferences || 'None'}
-Cooking Style: ${data.mealStyle || 'Any'}
-Requests: ${data.cookingRequests || 'None'}
-Available Appliances: ${data.appliances?.join(', ') || 'None'}
-Ingredients on hand: ${data.onHandIngredients || 'None'}
-Schedule insights: ${data.calendarInsights || 'None'}
-Number of people: ${data.people || 'Not specified'}
+- Diet Type: ${dietType}
+- Preferences: ${dietaryPreferences}
+- Cooking Style: ${mealStyle}
+- Special Requests: ${cookingRequests}
+- Available Appliances: ${appliances.join(', ') || 'None'}
+- Ingredients on hand: ${onHandIngredients}
+- Schedule insights: ${calendarInsights}
+- Household size: ${householdSize}
 
-Please format clearly with:
-• Meal Plan section (Weekday names: Monday through Sunday, not 'Day 1/2'. Include note after day name if mentioned in Schedule Insights like "Sunday – Baseball Night")
-• Recipe section (one recipe per meal, with ingredients + instructions, prep & cook time, and macros)
-• Shopping List grouped by category with quantities.
-Use US measurements.`;
+${feedbackText}
+
+🔁 Requirements:
+- Use weekday names (Monday–Sunday) in order, not 'Day 1', 'Day 2'.
+- Match QUICK meals on busy days based on calendar insights.
+- Avoid ingredients the user dislikes.
+- Format clearly. End with a "Shopping List"
+
+🛒 Shopping List:
+- Combine ingredient quantities.
+- Use US measurements (cups, oz, tbsp, tsp, lbs).
+- Group ingredients by category.
+- Remove items the user already has.
+- Do NOT prefix with dashes or asterisks.`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -38,74 +88,100 @@ Use US measurements.`;
       { role: 'user', content: prompt }
     ],
     temperature: 0.7,
-    max_tokens: 5000
+    max_tokens: 4000
   });
 
   const result = completion.choices[0].message.content;
-  const [mealPlanPart, recipePart, shoppingListPart] = result.split(/(?=Recipe|Shopping List)/i);
+  const [mealPlanPart, shoppingListPart] = result.split(/(?=Shopping List)/i);
 
   return {
-    mealPlan: (mealPlanPart || 'Meal plan not generated.').trim(),
-    recipes: (recipePart || 'Recipe section missing.').trim(),
-    shoppingList: (shoppingListPart || 'Shopping list missing.').trim(),
+    mealPlan: stripFormatting(mealPlanPart?.trim() || ''),
+    shoppingList: stripFormatting(shoppingListPart?.trim() || 'Shopping list coming soon...')
   };
 }
 
-let latestPlan = {};
+async function generateRecipes(data, mealPlan) {
+  const { householdSize = 4 } = data;
+
+  const prompt = `You are a recipe developer. Based on the following meal plan, write complete recipes for each meal.
+
+Meal Plan:
+${mealPlan}
+
+Each recipe must include:
+- Meal type (Breakfast, Lunch, or Supper)
+- Title (bolded)
+- Ingredients in a list (1 per line) with US quantities scaled to ${householdSize} servings
+- Instructions (step-by-step with numbers on same line as instruction)
+- Prep & Cook Time
+- Macros (carbs, fat, protein)
+- Do not use placeholders. Do not wrap titles in asterisks.`;
+
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [
+      { role: 'system', content: 'You are a professional recipe writer.' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.7,
+    max_tokens: 4000
+  });
+
+  return stripFormatting(completion.choices[0].message.content);
+}
 
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
-    const gptResult = await generateMealPlanWithGPT(data);
-    latestPlan = {
-      name: data.name || 'Guest',
-      ...gptResult
-    };
-    res.json(gptResult);
+    const sessionId = generateSessionId();
+
+    const gptResult = await generateMealPlanAndShoppingList(data);
+    const recipes = await generateRecipes(data, gptResult.mealPlan);
+
+    await saveJsonToDisk({ ...data, ...gptResult, recipes }, sessionId);
+
+    res.json({
+      sessionId,
+      mealPlan: gptResult.mealPlan,
+      shoppingList: gptResult.shoppingList,
+      recipes
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error generating meal plan.' });
   }
 });
 
-app.get('/api/pdf/mealplan', async (req, res) => {
+app.post('/api/pdf/:type', async (req, res) => {
   try {
-    const cleanedText = latestPlan.mealPlan
-      .replace(/^\*\*Meal Plan\*\*\n?/i, '')
-      .replace(/^\*\*([^\n]+?)\*\*/gm, (_, day) => `\n<b>${day}</b>`) // Bold days
-      .replace(/^\*\s*/gm, '') // Remove asterisks from meal lines
-      .replace(/^-\s*/gm, ''); // Also remove dashes if any
+    const { sessionId, name = 'Guest' } = req.body;
+    const { type } = req.params;
 
-    const pdf = await createPdfFromText(`Meal Plan for ${latestPlan.name}
+    const data = await loadJsonFromDisk(sessionId);
+    if (!data) return res.status(404).json({ error: 'Session not found.' });
 
-${cleanedText}`);
-    const url = await uploadPdfToS3(pdf, `${latestPlan.name}-plan.pdf`);
+    let content;
+    let options = {};
+    if (type === 'mealplan') {
+      content = `Meal Plan for ${name}\n\n${data.mealPlan}`;
+    } else if (type === 'recipes') {
+      content = `Recipes for ${name}\n\n${data.recipes}`;
+      options.layout = 'columns';
+    } else if (type === 'shopping-list') {
+      content = `Shopping List for ${name}\n\n${data.shoppingList}`;
+      options.type = 'shoppingList';
+    } else {
+      return res.status(400).json({ error: 'Invalid type' });
+    }
+
+    const buffer = await createPdfFromText(content, options);
+    const key = `${name}-${type}.pdf`;
+    const url = await uploadPdfToS3(buffer, key);
+
     res.json({ url });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to generate meal plan PDF.' });
-  }
-});
-
-app.get('/api/pdf/recipes', async (req, res) => {
-  try {
-    const pdf = await createPdfFromText(latestPlan.recipes, { layout: 'columns' });
-    const url = await uploadPdfToS3(pdf, `${latestPlan.name}-recipes.pdf`);
-    res.json({ url });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to generate recipe PDF.' });
-  }
-});
-
-app.get('/api/pdf/shopping-list', async (req, res) => {
-  try {
-    const pdf = await createPdfFromText(latestPlan.shoppingList, { type: 'shoppingList' });
-    const url = await uploadPdfToS3(pdf, `${latestPlan.name}-shopping.pdf`);
-    res.json({ url });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to generate shopping list PDF.' });
+    res.status(500).json({ error: 'PDF generation failed.' });
   }
 });
 
