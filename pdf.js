@@ -2,6 +2,14 @@
 import PDFDocument from 'pdfkit';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import crypto from 'crypto';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const DATA_DIR = path.join(__dirname, 'data');
 
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
@@ -10,6 +18,25 @@ const s3 = new S3Client({
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
   }
 });
+
+export async function saveJsonToDisk(data, name) {
+  await fs.mkdir(DATA_DIR, { recursive: true });
+  const filename = path.join(DATA_DIR, `${name}.json`);
+  await fs.writeFile(filename, JSON.stringify(data, null, 2));
+  return filename;
+}
+
+export async function loadJsonFromDisk(name) {
+  const filename = path.join(DATA_DIR, `${name}.json`);
+  const exists = await fs.stat(filename).then(() => true).catch(() => false);
+  if (!exists) return null;
+  const content = await fs.readFile(filename, 'utf-8');
+  return JSON.parse(content);
+}
+
+export function generateSessionId() {
+  return crypto.randomUUID();
+}
 
 export async function createPdfFromText(text, options = {}) {
   console.log('[createPdfFromText] Generating PDF for content...');
@@ -22,17 +49,18 @@ export async function createPdfFromText(text, options = {}) {
   });
 
   if (options.type === 'shoppingList') {
+    doc.font('Helvetica-Bold').fontSize(16).text('Shopping List', { align: 'center' });
+    doc.moveDown(1);
     const sections = text.split(/(?=^[A-Za-z ]+:)/m);
     sections.forEach(section => {
       const lines = section.trim().split('\n');
       const headingLine = lines[0].trim();
       const heading = headingLine.replace(/:$/, '');
 
-      doc.moveDown(1);
       doc.font('Helvetica-Bold').fontSize(13).text(heading);
       doc.moveDown(0.3);
 
-      lines.slice(1).join(',').split(/,\s*/).forEach(item => {
+      lines.slice(1).join(',').split(/,\s*/).sort().forEach(item => {
         const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
         if (cleanedItem) {
           doc.font('Helvetica').fontSize(12).text(cleanedItem);
@@ -67,66 +95,76 @@ export async function createPdfFromText(text, options = {}) {
 }
 
 function renderRecipeTextInSingleColumn(doc, text, options = {}) {
-  const lines = text.split('\n');
+  const recipes = text.split(/(?=^(Breakfast|Lunch|Supper):)/m);
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
+  recipes.forEach(recipeText => {
+    const lines = recipeText.trim().split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
 
-    const titleMatch = line.match(/^(Breakfast|Lunch|Supper):\s*(.*)$/);
-    if (titleMatch) {
-      const meal = titleMatch[1];
-      const recipeName = titleMatch[2].replace(/\*\*/g, '');
-      doc.moveDown(1);
-      doc.font('Helvetica-Bold').fontSize(14).text(`${meal}: ${recipeName}`);
-      doc.moveDown(0.5);
-      continue;
-    }
-
-    if (/^Ingredients:/i.test(line)) {
-      doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
-      const items = line.replace(/^Ingredients:\s*/i, '').split(/,\s*/);
-      items.forEach(item => {
-        doc.font('Helvetica').fontSize(12).text(item.trim());
- });
-      doc.moveDown(0.5);
-      continue;
-    }
-
-    if (/^Instructions:/i.test(line)) {
-      doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
-      i++;
-      while (i < lines.length && lines[i].trim() && !/^Prep & Cook Time:/i.test(lines[i]) && !/^Macros:/i.test(lines[i])) {
-        const instructionLine = lines[i].trim();
-        const stepMatch = instructionLine.match(/^(\d+)\.\s*(.*)$/);
-        if (stepMatch) {
-          doc.font('Helvetica').fontSize(12).text(`${stepMatch[1]}. ${stepMatch[2]}`);
-        } else {
-          doc.font('Helvetica').fontSize(12).text(instructionLine);
-        }
-        i++;
+      const titleMatch = line.match(/^(Breakfast|Lunch|Supper):\s*(.*)$/);
+      if (titleMatch) {
+        const meal = titleMatch[1];
+        const recipeName = titleMatch[2].replace(/\*\*/g, '');
+        doc.moveDown(1);
+        doc.font('Helvetica-Bold').fontSize(14).text(`${meal}: ${recipeName}`);
+        doc.moveDown(0.5);
+        continue;
       }
-      i--;
-      doc.moveDown(0.5);
-      continue;
-    }
 
-    if (/^Prep & Cook Time:/i.test(line)) {
-      doc.font('Helvetica-Bold').fontSize(12).text('Prep & Cook Time:');
-      doc.font('Helvetica').fontSize(12).text(line.replace(/^Prep & Cook Time:\s*/i, ''));
-      doc.moveDown(0.25);
-      continue;
-    }
+      if (/^Ingredients:/i.test(line)) {
+        doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
+        const ingredients = [];
+        i++;
+        while (i < lines.length && lines[i].trim() && !/^Instructions:/i.test(lines[i]) && !/^Prep & Cook Time:/i.test(lines[i]) && !/^Macros:/i.test(lines[i])) {
+          ingredients.push(lines[i].trim());
+          i++;
+        }
+        i--;
+        ingredients.forEach(item => {
+          doc.font('Helvetica').fontSize(12).text(item);
+        });
+        doc.moveDown(0.5);
+        continue;
+      }
 
-    if (/^Macros:/i.test(line)) {
-      doc.font('Helvetica-Bold').fontSize(12).text('Macros:');
-      doc.font('Helvetica').fontSize(12).text(line.replace(/^Macros:\s*/i, ''));
-      doc.moveDown(1.25);
-      continue;
-    }
+      if (/^Instructions:/i.test(line)) {
+        doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
+        const instructions = [];
+        i++;
+        while (i < lines.length && lines[i].trim() && !/^Prep & Cook Time:/i.test(lines[i]) && !/^Macros:/i.test(lines[i])) {
+          instructions.push(lines[i].trim());
+          i++;
+        }
+        i--;
+        instructions.forEach(step => {
+          doc.font('Helvetica').fontSize(12).text(step);
+        });
+        doc.moveDown(0.5);
+        continue;
+      }
 
-    doc.font('Helvetica').fontSize(12).text(line);
-  }
+      if (/^Prep & Cook Time:/i.test(line)) {
+        doc.font('Helvetica-Bold').fontSize(12).text('Prep & Cook Time:');
+        const time = line.replace(/^Prep & Cook Time:\s*/i, '');
+        doc.font('Helvetica').fontSize(12).text(time);
+        doc.moveDown(0.25);
+        continue;
+      }
+
+      if (/^Macros:/i.test(line)) {
+        doc.font('Helvetica-Bold').fontSize(12).text('Macros:');
+        const macros = line.replace(/^Macros:\s*/i, '');
+        doc.font('Helvetica').fontSize(12).text(macros);
+        doc.moveDown(1.25);
+        continue;
+      }
+
+      doc.font('Helvetica').fontSize(12).text(line);
+    }
+  });
 }
+
 export async function uploadPdfToS3(buffer, filename) {
   console.log(`[uploadPdfToS3] Uploading ${filename} to S3...`);
 
