@@ -15,7 +15,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const allowedOrigins = ['https://login.gosocialfox.com'];
+const allowedOrigins = [
+  'https://login.gosocialfox.com',
+  'https://thechaostoconfidencecollective.com'
+];
+
 
 app.use(cors({
   origin: function (origin, callback) {
