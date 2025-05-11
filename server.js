@@ -66,7 +66,7 @@ async function generateRecipes(data, mealPlan) {
   const prompt = `You are a recipe developer. Based on the following meal plan, write complete recipes for each meal. Include:
 - Meal Type (e.g., Breakfast, Lunch, Supper)
 - Title (bold or easily scannable)
-- Ingredients (one per line, using U.S. measurements like cups, tbsp, tsp, oz, lbs, and specify exact meat types like ground beef, sirloin, chicken breast, pork loin, etc.)
+- Ingredients (one per line, using U.S. measurements like cups, tbsp, tsp, oz, lbs, and specify exact meat types like ground beef, sirloin, chicken breast, pork loin, etc. Scale quantities for ${data.people || 4} people.)
 - Instructions
 - Prep & Cook time
 - Macros per serving
