@@ -51,10 +51,7 @@ export async function createPdfFromText(text, options = {}) {
     });
   } else if (options.type === 'recipes') {
     const lines = text.split('\n');
-    let inIngredients = false;
-    let inInstructions = false;
-
-    lines.forEach((line, idx) => {
+ lines.forEach((line, idx) => {
       const trimmed = line.trim();
       if (!trimmed) {
         doc.moveDown(1);
@@ -63,43 +60,27 @@ export async function createPdfFromText(text, options = {}) {
 
       safePageBreak(doc);
 
-      if (/^(Breakfast|Lunch|Supper|Snack):\s*/i.test(trimmed)) {
-        doc.moveDown(1);
-        doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
+      if (/^Meal Type:/i.test(trimmed)) {
+        doc.moveDown(0.5);
+        doc.font('Helvetica-Bold').fontSize(12).text(trimmed);
+      } else if (/^(Breakfast|Lunch|Supper|Snack):\s*/i.test(trimmed)) {
+        doc.moveDown(0.5);
+ doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
       } else if (/^Ingredients:/i.test(trimmed)) {
-        inIngredients = true;
-        inInstructions = false;
-        doc.moveDown(0.3);
+ doc.moveDown(0.3);
         doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
       } else if (/^Instructions:/i.test(trimmed)) {
-        inIngredients = false;
-        inInstructions = true;
-        doc.moveDown(0.3);
+ doc.moveDown(0.3);
         doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
       } else if (/^Prep.*Time:/i.test(trimmed)) {
-        inIngredients = false;
-        inInstructions = false;
-        doc.moveDown(0.3);
+ doc.moveDown(0.3);
         doc.font('Helvetica').fontSize(12).text(trimmed);
       } else if (/^Macros:/i.test(trimmed)) {
-        inIngredients = false;
-        inInstructions = false;
-        doc.font('Helvetica').fontSize(12).text(trimmed);
+ doc.font('Helvetica').fontSize(12).text(trimmed);
         doc.moveDown(2);
-      } else if (/^\*.*\*$/g.test(trimmed)) {
-        // Bold recipe name
-        const recipeName = trimmed.replace(/\*/g, '');
-        doc.moveDown(0.5);
-        doc.font('Helvetica-Bold').fontSize(13).text(recipeName);
-      } else {
-        if (inIngredients) {
-          doc.font('Helvetica').fontSize(12).text(trimmed);
-        } else if (inInstructions && /^\d+\.\s+/.test(trimmed)) {
-          doc.font('Helvetica').fontSize(12).text(trimmed);
-        } else {
-          doc.font('Helvetica').fontSize(12).text(trimmed);
-        }
-      }
+} else {
+        doc.font('Helvetica').fontSize(12).text(trimmed);
+ }
     });
   } else {
     const lines = text.split('\n');
