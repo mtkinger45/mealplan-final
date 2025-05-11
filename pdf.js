@@ -79,7 +79,10 @@ export async function createPdfFromText(text, options = {}) {
       const trimmed = line.trim();
       if (/^Meal Plan for /i.test(trimmed)) {
         doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
-      } else if (/^\w+day(\s+[-–]\s+Busy:.*?)?$/i.test(trimmed)) {
+      } else if (/^(Day \d+:\s+\w+day.*?)$/i.test(trimmed)) {
+        doc.moveDown(0.5);
+        doc.font('Helvetica-Bold').fontSize(12).text(trimmed);
+      } else if (/^(Day \d+:\s+.*?)$/i.test(trimmed)) {
         doc.moveDown(0.5);
         doc.font('Helvetica-Bold').fontSize(12).text(trimmed);
       } else if (/^(Breakfast|Lunch|Supper|Snack):/i.test(trimmed)) {
