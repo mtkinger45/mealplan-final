@@ -64,11 +64,12 @@ Note: Format clearly. Use weekday names if possible, and group meals logically. 
 
 async function generateRecipes(data, mealPlan) {
   const prompt = `You are a recipe developer. Based on the following meal plan, write complete recipes for each meal. Include:
-- Title
-- Ingredients (one per line)
+- Meal Type (e.g., Breakfast, Lunch, Supper)
+- Title (bold or easily scannable)
+- Ingredients (one per line, using U.S. measurements like cups, tbsp, tsp, oz, lbs, and specify exact meat types like ground beef, sirloin, chicken breast, pork loin, etc.)
 - Instructions
 - Prep & Cook time
-- Macros
+- Macros per serving
 Remove asterisks and format clearly.`;
 
   const completion = await openai.chat.completions.create({
@@ -92,7 +93,7 @@ app.post('/api/mealplan', async (req, res) => {
     const recipes = await generateRecipes(data, mealData.mealPlan);
 
     const planPdfBuffer = await createPdfFromText(`Meal Plan for ${data.name || 'Guest'}\n\n${mealData.mealPlan}`);
-    const recipesPdfBuffer = await createPdfFromText(`Recipes for ${data.name || 'Guest'}\n\n${recipes}`);
+    const recipesPdfBuffer = await createPdfFromText(`Recipes for ${data.name || 'Guest'}\n\n${recipes}`, { type: 'recipes' });
     const shoppingPdfBuffer = await createPdfFromText(`Shopping List for ${data.name || 'Guest'}\n\n${mealData.shoppingList}`, { type: 'shoppingList' });
 
     await uploadPdfToS3(planPdfBuffer, `${sessionId}-mealplan.pdf`);
