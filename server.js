@@ -116,22 +116,25 @@ Avoid placeholder text.`;
 });
 
 app.get('/api/pdf/:sessionId', async (req, res) => {
+  const { sessionId } = req.params;
+  const { type } = req.query;
+  const filename = `${sessionId}-${type}.pdf`;
+
+  const bucketName = process.env.AWS_BUCKET_NAME;
+
   try {
-    const sessionId = req.params.sessionId;
-    const data = await loadFromCache(sessionId);
-    const name = data.name || 'Guest';
+    const command = new GetObjectCommand({
+      Bucket: bucketName,
+      Key: filename,
+    });
 
-    const [planPdf, recipesPdf, shoppingPdf] = await Promise.all([
-      createPdfFromText(`Meal Plan for ${name}\n\n${data.mealPlan}`).then(buffer => uploadPdfToS3(buffer, `${sessionId}-plan.pdf`)),
-      createPdfFromText(`Recipes for ${name}\n\n${data.recipes}`, { layout: 'columns' }).then(buffer => uploadPdfToS3(buffer, `${sessionId}-recipes.pdf`)),
-      createPdfFromText(`Shopping List for ${name}\n\n${data.shoppingList}`, { type: 'shoppingList' }).then(buffer => uploadPdfToS3(buffer, `${sessionId}-shopping.pdf`))
-    ]);
-
-    res.json({ planPdf, recipesPdf, shoppingPdf });
-  } catch (err) {
-    console.error('PDF Error:', err);
-    res.status(500).json({ error: 'Could not generate PDFs.' });
+    const signedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    res.json({ url: signedUrl });
+  } catch (error) {
+    console.error('Error generating signed URL:', error.message);
+    res.status(404).json({ error: 'PDF not found' });
   }
 });
+
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
