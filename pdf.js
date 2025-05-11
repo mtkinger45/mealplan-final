@@ -1,4 +1,3 @@
-
 // pdf.js
 import PDFDocument from 'pdfkit';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
@@ -42,8 +41,38 @@ export async function createPdfFromText(text, options = {}) {
 
       doc.moveDown(1.5);
     });
-  } else if (options.layout === 'columns') {
-    renderRecipeTextInColumns(doc, text);
+  } else if (options.type === 'recipes') {
+    const lines = text.split('\n');
+    lines.forEach((line, idx) => {
+      const trimmed = line.trim();
+
+      if (!trimmed) {
+        doc.moveDown(1);
+        return;
+      }
+
+      if (/^Meal Type:/i.test(trimmed)) {
+        doc.moveDown(0.5);
+        doc.font('Helvetica-Bold').fontSize(12).text(trimmed);
+      } else if (/^(Breakfast|Lunch|Supper|Snack):\s*/i.test(trimmed)) {
+        doc.moveDown(0.5);
+        doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
+      } else if (/^Ingredients:/i.test(trimmed)) {
+        doc.moveDown(0.3);
+        doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
+      } else if (/^Instructions:/i.test(trimmed)) {
+        doc.moveDown(0.3);
+        doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
+      } else if (/^Prep.*Time:/i.test(trimmed)) {
+        doc.moveDown(0.3);
+        doc.font('Helvetica').fontSize(12).text(trimmed);
+      } else if (/^Macros:/i.test(trimmed)) {
+        doc.font('Helvetica').fontSize(12).text(trimmed);
+        doc.moveDown(2);
+      } else {
+        doc.font('Helvetica').fontSize(12).text(trimmed);
+      }
+    });
   } else {
     const lines = text.split('\n');
     lines.forEach((line, idx) => {
