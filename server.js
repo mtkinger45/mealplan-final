@@ -76,7 +76,8 @@ async function generateRecipes(data, mealPlan) {
 - Prep & Cook time
 - Macros per serving
 
-➕ Add 1 blank line between recipes for clarity.`;
+➕ Add 1 blank line between recipes for clarity.
+➕ Ensure the recipe title is bolded for emphasis.`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
