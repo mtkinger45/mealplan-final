@@ -42,7 +42,12 @@ User info:
 - Schedule insights: ${data.calendarInsights}
 - Household size: ${data.people || 4}
 
-Note: Format clearly. Use weekday names if possible, and group meals logically. Remove extra formatting characters.`;
+🔁 Please:
+- Format clearly using weekday names
+- Remove extra formatting characters
+- Display meal name and recipe title on same line (e.g., Breakfast: Egg Scramble)
+- Do NOT list ingredients or instructions in the meal plan section
+- Add any relevant calendar notes next to the day of the week (e.g., Tuesday – Busy: Soccer Practice)`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -65,12 +70,13 @@ Note: Format clearly. Use weekday names if possible, and group meals logically. 
 async function generateRecipes(data, mealPlan) {
   const prompt = `You are a recipe developer. Based on the following meal plan, write complete recipes for each meal. Include:
 - Meal Type (e.g., Breakfast, Lunch, Supper)
-- Title (bold or easily scannable)
-- Ingredients (one per line, using U.S. measurements like cups, tbsp, tsp, oz, lbs, and specify exact meat types like ground beef, sirloin, chicken breast, pork loin, etc. Scale quantities for ${data.people || 4} people.)
-- Instructions
+- Recipe Title (bold)
+- Ingredients (one per line, using U.S. measurements like cups, tbsp, tsp, oz, lbs, and specify exact meat types like ground beef, chicken breast, pork loin, etc. Scale quantities for ${data.people || 4} people)
+- Instructions (step-by-step, with numbering like 1. ... 2. ...)
 - Prep & Cook time
 - Macros per serving
-Remove asterisks and format clearly.`;
+
+➕ Add 1 blank line between recipes for clarity.`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
