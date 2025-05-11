@@ -21,6 +21,12 @@ export async function createPdfFromText(text, options = {}) {
     console.log('[createPdfFromText] PDF generation complete.');
   });
 
+  const safePageBreak = (doc, threshold = 100) => {
+    if (doc.y > doc.page.height - doc.page.margins.bottom - threshold) {
+      doc.addPage();
+    }
+  };
+
   if (options.type === 'shoppingList') {
     const sections = text.split(/(?=^[A-Za-z ]+:)/m);
     sections.forEach(section => {
@@ -28,6 +34,7 @@ export async function createPdfFromText(text, options = {}) {
       const headingLine = lines[0].trim();
       const heading = headingLine.replace(/:$/, '');
 
+      safePageBreak(doc);
       doc.moveDown(1);
       doc.font('Helvetica-Bold').fontSize(13).text(heading);
       doc.moveDown(0.3);
@@ -35,6 +42,7 @@ export async function createPdfFromText(text, options = {}) {
       lines.slice(1).join(',').split(/,\s*/).forEach(item => {
         const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
         if (cleanedItem) {
+          safePageBreak(doc);
           doc.font('Helvetica').fontSize(12).text(cleanedItem);
         }
       });
@@ -45,11 +53,12 @@ export async function createPdfFromText(text, options = {}) {
     const lines = text.split('\n');
     lines.forEach((line, idx) => {
       const trimmed = line.trim();
-
       if (!trimmed) {
         doc.moveDown(1);
         return;
       }
+
+      safePageBreak(doc);
 
       if (/^Meal Type:/i.test(trimmed)) {
         doc.moveDown(0.5);
@@ -77,6 +86,8 @@ export async function createPdfFromText(text, options = {}) {
     const lines = text.split('\n');
     lines.forEach((line, idx) => {
       const trimmed = line.trim();
+      safePageBreak(doc);
+
       if (/^Meal Plan for /i.test(trimmed)) {
         doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
       } else if (/^(Day \d+:\s+\w+day.*?)$/i.test(trimmed)) {
@@ -93,6 +104,7 @@ export async function createPdfFromText(text, options = {}) {
       } else {
         doc.font('Helvetica').fontSize(12).text(trimmed);
       }
+
       if (idx < lines.length - 1) doc.moveDown(0.5);
     });
   }
@@ -105,10 +117,6 @@ export async function createPdfFromText(text, options = {}) {
       resolve(pdfBuffer);
     });
   });
-}
-
-function renderRecipeTextInColumns(doc, text) {
-  // no changes from canvas for now
 }
 
 export async function uploadPdfToS3(buffer, filename) {
