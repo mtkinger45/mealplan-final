@@ -1,3 +1,4 @@
+
 // server.js
 import express from 'express';
 import bodyParser from 'body-parser';
@@ -35,7 +36,8 @@ function weekdaySequence(startDay, duration) {
 
 function extractRelevantInsights(calendarInsights, startDay, duration) {
   const days = weekdaySequence(startDay, duration);
-  const insights = calendarInsights.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+  const insights = calendarInsights.split(/[,
+]/).map(s => s.trim()).filter(Boolean);
   return insights.filter(line => days.some(day => line.toLowerCase().includes(day.toLowerCase()))).join(', ');
 }
 
@@ -156,6 +158,43 @@ app.post('/api/mealplan', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error generating meal plan.' });
+  }
+});
+
+app.get('/api/pdf/:sessionId', async (req, res) => {
+  const { sessionId } = req.params;
+  const { type } = req.query;
+  const filePath = path.join(CACHE_DIR, `${sessionId}.json`);
+
+  try {
+    const cache = JSON.parse(await fs.readFile(filePath, 'utf-8'));
+    let content = '';
+    let filename = '';
+
+    if (type === 'mealplan') {
+      content = `Meal Plan for ${cache.name}
+
+${cache.mealPlan}`;
+      filename = `${sessionId}-mealplan.pdf`;
+    } else if (type === 'recipes') {
+      content = cache.recipes;
+      filename = `${sessionId}-recipes.pdf`;
+    } else if (type === 'shopping-list') {
+      content = cache.shoppingList;
+      filename = `${sessionId}-shopping.pdf`;
+    } else {
+      return res.status(400).json({ error: 'Invalid type parameter.' });
+    }
+
+    const buffer = await createPdfFromText(content, {
+      type: type === 'shopping-list' ? 'shoppingList' : (type === 'recipes' ? 'columns' : undefined)
+    });
+
+    const url = await uploadPdfToS3(buffer, filename);
+    res.json({ url });
+  } catch (err) {
+    console.error('PDF generation error:', err);
+    res.status(404).json({ error: 'PDF or session not found.' });
   }
 });
 
