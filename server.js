@@ -4,50 +4,78 @@ import bodyParser from 'body-parser';
 import cors from 'cors';
 import { createPdfFromText, uploadPdfToS3 } from './pdf.js';
 import OpenAI from 'openai';
-import { randomUUID } from 'crypto';
+import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs/promises';
+import path from 'path';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const CACHE_DIR = './cache';
 
-const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
-
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS not allowed from this origin'));
-    }
-  },
-  credentials: true
-}));
-
+app.use(cors());
 app.use(bodyParser.json({ limit: '5mb' }));
 
-function stripHtmlAndAsterisks(text) {
-  return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*/g, '');
+// Ensure cache directory exists
+await fs.mkdir(CACHE_DIR, { recursive: true });
+
+const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+function rotateWeekdays(startDay) {
+  const index = weekdays.findIndex(day => day.toLowerCase() === startDay.toLowerCase());
+  return [...weekdays.slice(index), ...weekdays.slice(0, index)];
 }
 
-async function generateMealPlanAndShoppingList(data) {
-  const prompt = `You are a professional meal planner. Based on the user's preferences below, create a ${data.duration || 7}-day meal plan. Each day should include: ${data.meals?.join(', ') || 'Supper'}.
+function stripHtmlAndAsterisks(text) {
+  return text
+    .replace(/<b>(.*?)<\/b>/g, '$1')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*/g, '')
+    .trim();
+}
+
+async function generateContent(data) {
+  const {
+    name = 'Guest',
+    duration = 7,
+    meals = ['Supper'],
+    dietType = 'Any',
+    dietaryPreferences = 'None',
+    mealStyle = 'Any',
+    cookingRequests = 'None',
+    appliances = [],
+    onHandIngredients = 'None',
+    calendarInsights = 'None',
+    feedback = '',
+    householdSize = 4,
+    startDay = 'Monday'
+  } = data;
+
+  const feedbackText = feedback ? `NOTE: The user has requested this revision: "${feedback}".` : '';
+
+  const rotatedDays = rotateWeekdays(startDay);
+
+  const prompt = `You are a professional meal planner. Based on the user's preferences, create a ${duration}-day meal plan. Each day should include the following meals: ${meals.join(', ')}.
 
 User info:
-- Diet Type: ${data.dietType}
-- Preferences: ${data.dietaryPreferences}
-- Cooking Style: ${data.mealStyle}
-- Special Requests: ${data.cookingRequests}
-- Available Appliances: ${data.appliances?.join(', ') || 'None'}
-- Ingredients on hand: ${data.onHandIngredients}
-- Schedule insights: ${data.calendarInsights}
-- Household size: ${data.people || 4}
+- Diet Type: ${dietType}
+- Preferences: ${dietaryPreferences}
+- Cooking Style: ${mealStyle}
+- Special Requests: ${cookingRequests}
+- Available Appliances: ${appliances.join(', ') || 'None'}
+- Ingredients on hand: ${onHandIngredients}
+- Schedule insights: ${calendarInsights}
+- Household size: ${householdSize}
+- Start day: ${startDay}
+
+${feedbackText}
 
 🔁 Please:
-- Format clearly using weekday names
-- Remove extra formatting characters
-- Display meal name and recipe title on same line (e.g., Breakfast: Egg Scramble)
-- Do NOT list ingredients or instructions in the meal plan section
-- Add any relevant calendar notes next to the day of the week (e.g., Tuesday – Busy: Soccer Practice)`;
+- Use these weekday names in order: ${rotatedDays.join(', ')}
+- Match QUICK meals on busy days (based on the user's calendar)
+- Omit meals for skipped days
+- Do NOT include ingredients or instructions in the meal plan
+- Ensure the shopping list reflects combined ingredients with US measurements, grouped by category, minus on-hand items`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -61,29 +89,33 @@ User info:
 
   const result = completion.choices[0].message.content;
   const [mealPlanPart, shoppingListPart] = result.split(/(?=Shopping List)/i);
+
   return {
-    mealPlan: stripHtmlAndAsterisks(mealPlanPart?.trim() || ''),
-    shoppingList: stripHtmlAndAsterisks(shoppingListPart?.trim() || '')
+    mealPlan: stripHtmlAndAsterisks(mealPlanPart || ''),
+    shoppingList: stripHtmlAndAsterisks(shoppingListPart || 'Shopping list coming soon...')
   };
 }
 
 async function generateRecipes(data, mealPlan) {
-  const prompt = `You are a recipe developer. Based on the following meal plan, write complete recipes for each meal. Include:
-- Meal Type (e.g., Breakfast, Lunch, Supper)
-- Recipe Title (bold)
-- Ingredients (one per line, using U.S. measurements like cups, tbsp, tsp, oz, lbs, and specify exact meat types like ground beef, chicken breast, pork loin, etc. Scale quantities for ${data.people || 4} people)
-- Instructions (step-by-step, with numbering like 1. ... 2. ...)
-- Prep & Cook time
-- Macros per serving
+  const { householdSize = 4 } = data;
 
-➕ Add 1 blank line between recipes for clarity.
-➕ Ensure the recipe title is bolded for emphasis.`;
+  const prompt = `You are a recipe developer. Write recipes for the following meal plan:
+
+${mealPlan}
+
+Each recipe should include:
+- Recipe name (bold)
+- Ingredients (US measurements, scaled for ${householdSize} servings)
+- Instructions (step-by-step)
+- Prep and cook time
+- Macros per serving
+Make sure all meals are covered. Do not repeat or add placeholder text.`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
     messages: [
-      { role: 'system', content: 'You are a recipe expert.' },
-      { role: 'user', content: `${prompt}\n\n${mealPlan}` }
+      { role: 'system', content: 'You are a professional recipe writer.' },
+      { role: 'user', content: prompt }
     ],
     temperature: 0.7,
     max_tokens: 4000
@@ -95,65 +127,46 @@ async function generateRecipes(data, mealPlan) {
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
-    const sessionId = randomUUID();
-    const mealData = await generateMealPlanAndShoppingList(data);
-    const recipes = await generateRecipes(data, mealData.mealPlan);
+    const sessionId = uuidv4();
+    const { mealPlan, shoppingList } = await generateContent(data);
+    const recipes = await generateRecipes(data, mealPlan);
 
-    const planPdfBuffer = await createPdfFromText(`Meal Plan for ${data.name || 'Guest'}\n\n${mealData.mealPlan}`);
-    const recipesPdfBuffer = await createPdfFromText(`Recipes for ${data.name || 'Guest'}\n\n${recipes}`, { type: 'recipes' });
-    const shoppingPdfBuffer = await createPdfFromText(`Shopping List for ${data.name || 'Guest'}\n\n${mealData.shoppingList}`, { type: 'shoppingList' });
+    const sessionData = { id: sessionId, name: data.name || 'Guest', mealPlan, shoppingList, recipes };
+    await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify(sessionData, null, 2));
 
-    await uploadPdfToS3(planPdfBuffer, `${sessionId}-mealplan.pdf`);
-    await uploadPdfToS3(recipesPdfBuffer, `${sessionId}-recipes.pdf`);
-    await uploadPdfToS3(shoppingPdfBuffer, `${sessionId}-shopping-list.pdf`);
-
-    res.json({
-      sessionId,
-      mealPlan: mealData.mealPlan,
-      recipes,
-      shoppingList: mealData.shoppingList
-    });
+    res.json({ sessionId, mealPlan, shoppingList, recipes });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Error generating meal plan.' });
+    res.status(500).json({ error: 'Error generating content.' });
   }
 });
 
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-
-const s3 = new S3Client({
-  region: process.env.AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-  }
-});
-
-app.get('/api/pdf/:sessionId', async (req, res) => {
-  const { sessionId } = req.params;
-  const { type } = req.query;
-
-  const suffix = {
-    'mealplan': 'mealplan.pdf',
-    'recipes': 'recipes.pdf',
-    'shopping-list': 'shopping-list.pdf'
-  }[type];
-
-  if (!suffix) {
-    return res.status(400).json({ error: 'Invalid type' });
-  }
-
-  const Key = `${sessionId}-${suffix}`;
-  const command = new GetObjectCommand({ Bucket: process.env.AWS_BUCKET_NAME, Key });
+app.get('/api/pdf/:id', async (req, res) => {
+  const { id } = req.params;
+  const { type = 'mealplan' } = req.query;
 
   try {
-    const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    const cachePath = path.join(CACHE_DIR, `${id}.json`);
+    const raw = await fs.readFile(cachePath, 'utf-8');
+    const { name, mealPlan, recipes, shoppingList } = JSON.parse(raw);
+
+    const contentMap = {
+      mealplan: `Meal Plan for ${name}\n\n${mealPlan}`,
+      recipes: `Recipes for ${name}\n\n${recipes}`,
+      'shopping-list': `Shopping List for ${name}\n\n${shoppingList}`
+    };
+
+    const pdfBuffer = await createPdfFromText(contentMap[type] || '', { type });
+    const pdfKey = `${id}-${type}.pdf`;
+    const url = await uploadPdfToS3(pdfBuffer, pdfKey);
+
     res.json({ url });
   } catch (err) {
-    console.error('[PDF Fetch Error]', err);
-    res.status(404).json({ error: 'PDF not found' });
+    console.error(err);
+    res.status(404).json({ error: 'Session not found or PDF failed.' });
   }
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
