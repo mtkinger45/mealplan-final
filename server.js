@@ -4,7 +4,7 @@ import bodyParser from 'body-parser';
 import cors from 'cors';
 import { createPdfFromText, uploadPdfToS3 } from './pdf.js';
 import OpenAI from 'openai';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -13,31 +13,40 @@ const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CACHE_DIR = './cache';
 
-app.use(cors());
+const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS not allowed from this origin'));
+    }
+  },
+  credentials: true
+}));
+
 app.use(bodyParser.json({ limit: '5mb' }));
 
-// Ensure cache directory exists
-await fs.mkdir(CACHE_DIR, { recursive: true });
-
-const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
-function rotateWeekdays(startDay) {
-  const index = weekdays.findIndex(day => day.toLowerCase() === startDay.toLowerCase());
-  return [...weekdays.slice(index), ...weekdays.slice(0, index)];
+function weekdaySequence(startDay, duration) {
+  const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const startIndex = weekdays.indexOf(startDay);
+  return Array.from({ length: duration }, (_, i) => weekdays[(startIndex + i) % 7]);
 }
 
-function stripHtmlAndAsterisks(text) {
-  return text
-    .replace(/<b>(.*?)<\/b>/g, '$1')
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/\*/g, '')
-    .trim();
+function extractRelevantInsights(calendarInsights, startDay, duration) {
+  const days = weekdaySequence(startDay, duration);
+  const insights = calendarInsights.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+  return insights.filter(line => days.some(day => line.toLowerCase().includes(day.toLowerCase()))).join(', ');
 }
 
-async function generateContent(data) {
+function stripFormatting(text) {
+  return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*/g, '');
+}
+
+async function generateMealPlanData(data) {
   const {
-    name = 'Guest',
     duration = 7,
+    startDay = 'Monday',
     meals = ['Supper'],
     dietType = 'Any',
     dietaryPreferences = 'None',
@@ -48,34 +57,33 @@ async function generateContent(data) {
     calendarInsights = 'None',
     feedback = '',
     householdSize = 4,
-    startDay = 'Monday'
+    name = 'Guest'
   } = data;
 
+  const cleanedInsights = extractRelevantInsights(calendarInsights, startDay, duration);
+  const weekdayList = weekdaySequence(startDay, duration);
   const feedbackText = feedback ? `NOTE: The user has requested this revision: "${feedback}".` : '';
 
-  const rotatedDays = rotateWeekdays(startDay);
-
-  const prompt = `You are a professional meal planner. Based on the user's preferences, create a ${duration}-day meal plan. Each day should include the following meals: ${meals.join(', ')}.
-
-User info:
+  const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Each day should include: ${meals.join(', ')}.
+User Info:
 - Diet Type: ${dietType}
 - Preferences: ${dietaryPreferences}
 - Cooking Style: ${mealStyle}
 - Special Requests: ${cookingRequests}
-- Available Appliances: ${appliances.join(', ') || 'None'}
-- Ingredients on hand: ${onHandIngredients}
-- Schedule insights: ${calendarInsights}
+- Appliances: ${appliances.join(', ') || 'None'}
+- On-hand Ingredients: ${onHandIngredients}
 - Household size: ${householdSize}
-- Start day: ${startDay}
-
+- Calendar Insights: ${cleanedInsights || 'None'}
 ${feedbackText}
 
-🔁 Please:
-- Use these weekday names in order: ${rotatedDays.join(', ')}
-- Match QUICK meals on busy days (based on the user's calendar)
-- Omit meals for skipped days
-- Do NOT include ingredients or instructions in the meal plan
-- Ensure the shopping list reflects combined ingredients with US measurements, grouped by category, minus on-hand items`;
+Instructions:
+- Use ${startDay} as the first day and follow correct weekday order
+- Add a note next to the day name if calendar insights are relevant (e.g., Monday – Baseball night)
+- Do NOT use "Day 1", use weekday names only
+- Meals should be simple, realistic, and vary throughout the week
+- Omit detailed ingredients and instructions in this view
+- End with a shopping list that combines all ingredients and subtracts on-hand items.
+Use U.S. measurements. Group ingredients by type (Produce, Meat, Dairy, etc.)`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -91,25 +99,26 @@ ${feedbackText}
   const [mealPlanPart, shoppingListPart] = result.split(/(?=Shopping List)/i);
 
   return {
-    mealPlan: stripHtmlAndAsterisks(mealPlanPart || ''),
-    shoppingList: stripHtmlAndAsterisks(shoppingListPart || 'Shopping list coming soon...')
+    mealPlan: stripFormatting(mealPlanPart?.trim() || ''),
+    shoppingList: stripFormatting(shoppingListPart?.trim() || 'Shopping list coming soon...')
   };
 }
 
 async function generateRecipes(data, mealPlan) {
   const { householdSize = 4 } = data;
+  const prompt = `You are a recipe writer. Based on the following meal plan, write full recipes for each meal.
 
-  const prompt = `You are a recipe developer. Write recipes for the following meal plan:
-
+Meal Plan:
 ${mealPlan}
 
-Each recipe should include:
-- Recipe name (bold)
-- Ingredients (US measurements, scaled for ${householdSize} servings)
-- Instructions (step-by-step)
-- Prep and cook time
+Include:
+- Title (bold)
+- Ingredients listed with quantities for ${householdSize} people (use U.S. system)
+- Step-by-step instructions
+- Prep & cook time
 - Macros per serving
-Make sure all meals are covered. Do not repeat or add placeholder text.`;
+- Mention meat cut (e.g., ground beef, sirloin, thighs)
+- Separate each recipe clearly and do NOT use placeholders.`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -121,49 +130,32 @@ Make sure all meals are covered. Do not repeat or add placeholder text.`;
     max_tokens: 4000
   });
 
-  return stripHtmlAndAsterisks(completion.choices[0].message.content);
+  return stripFormatting(completion.choices[0].message.content);
 }
 
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
-    const sessionId = uuidv4();
-    const { mealPlan, shoppingList } = await generateContent(data);
-    const recipes = await generateRecipes(data, mealPlan);
+    const sessionId = randomUUID();
+    const mealPlanData = await generateMealPlanData(data);
+    const recipes = await generateRecipes(data, mealPlanData.mealPlan);
 
-    const sessionData = { id: sessionId, name: data.name || 'Guest', mealPlan, shoppingList, recipes };
-    await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify(sessionData, null, 2));
+    await fs.mkdir(CACHE_DIR, { recursive: true });
+    await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify({
+      name: data.name || 'Guest',
+      ...mealPlanData,
+      recipes
+    }, null, 2));
 
-    res.json({ sessionId, mealPlan, shoppingList, recipes });
+    res.json({
+      sessionId,
+      mealPlan: mealPlanData.mealPlan,
+      shoppingList: mealPlanData.shoppingList,
+      recipes
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Error generating content.' });
-  }
-});
-
-app.get('/api/pdf/:id', async (req, res) => {
-  const { id } = req.params;
-  const { type = 'mealplan' } = req.query;
-
-  try {
-    const cachePath = path.join(CACHE_DIR, `${id}.json`);
-    const raw = await fs.readFile(cachePath, 'utf-8');
-    const { name, mealPlan, recipes, shoppingList } = JSON.parse(raw);
-
-    const contentMap = {
-      mealplan: `Meal Plan for ${name}\n\n${mealPlan}`,
-      recipes: `Recipes for ${name}\n\n${recipes}`,
-      'shopping-list': `Shopping List for ${name}\n\n${shoppingList}`
-    };
-
-    const pdfBuffer = await createPdfFromText(contentMap[type] || '', { type });
-    const pdfKey = `${id}-${type}.pdf`;
-    const url = await uploadPdfToS3(pdfBuffer, pdfKey);
-
-    res.json({ url });
-  } catch (err) {
-    console.error(err);
-    res.status(404).json({ error: 'Session not found or PDF failed.' });
+    res.status(500).json({ error: 'Error generating meal plan.' });
   }
 });
 
