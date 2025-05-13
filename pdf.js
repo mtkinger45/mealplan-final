@@ -39,11 +39,11 @@ export async function createPdfFromText(text, options = {}) {
       doc.font('Helvetica-Bold').fontSize(13).text(heading);
       doc.moveDown(0.3);
 
-      lines.slice(1).join(',').split(/,\s*/).forEach(item => {
-        const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
+      lines.slice(1).forEach(item => {
+        const cleanedItem = item.trim().replace(/^[-–•]\s*/, '').replace(/^(.*?):\s*(\d+)/, '$2 $1');
         if (cleanedItem) {
           safePageBreak(doc);
-          doc.font('Helvetica').fontSize(12).text(cleanedItem);
+          doc.font('Helvetica').fontSize(12).text(`• ${cleanedItem}`);
         }
       });
 
@@ -61,12 +61,15 @@ export async function createPdfFromText(text, options = {}) {
         return;
       }
 
+      if (/^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday) (Breakfast|Lunch|Supper):/i.test(trimmed)) {
+        doc.addPage();
+        doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
+        return;
+      }
+
       safePageBreak(doc);
 
-      if (/^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday) (Breakfast|Lunch|Supper):/i.test(trimmed)) {
-        doc.moveDown(0.5);
-        doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
-      } else if (/^Ingredients:/i.test(trimmed)) {
+      if (/^Ingredients:/i.test(trimmed)) {
         inIngredients = true;
         inInstructions = false;
         doc.moveDown(0.3);
