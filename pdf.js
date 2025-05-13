@@ -57,6 +57,7 @@ export async function createPdfFromText(text, options = {}) {
     const lines = text.split('\n');
     let inIngredients = false;
     let inInstructions = false;
+    let recipeCount = 0;
 
     lines.forEach((line, idx) => {
       const trimmed = line.trim();
@@ -66,7 +67,10 @@ export async function createPdfFromText(text, options = {}) {
       }
 
       if (/^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday) (Breakfast|Lunch|Supper):/i.test(trimmed)) {
-        if (idx !== 0) doc.addPage();
+        if (recipeCount > 0) {
+          doc.addPage();
+        }
+        recipeCount++;
         doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
         return;
       }
