@@ -63,8 +63,8 @@ export async function createPdfFromText(text, options = {}) {
 
       safePageBreak(doc);
 
-      if (/^(Breakfast|Lunch|Supper|Snack):\s*/i.test(trimmed)) {
-        doc.moveDown(1);
+      if (/^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday) (Breakfast|Lunch|Supper):/i.test(trimmed)) {
+        doc.moveDown(0.5);
         doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
       } else if (/^Ingredients:/i.test(trimmed)) {
         inIngredients = true;
@@ -100,7 +100,7 @@ export async function createPdfFromText(text, options = {}) {
         }
       }
     });
-} else {
+  } else {
     const lines = text.split('\n');
     lines.forEach((line, idx) => {
       const trimmed = line.trim();
@@ -123,7 +123,7 @@ export async function createPdfFromText(text, options = {}) {
       }
 
       if (idx < lines.length - 1) doc.moveDown(0.5);
- });
+    });
   }
 
   doc.end();
@@ -137,9 +137,9 @@ export async function createPdfFromText(text, options = {}) {
 }
 
 export async function uploadPdfToS3(buffer, filename) {
-
+  console.log(`[uploadPdfToS3] Uploading ${filename} to S3...`);
   const bucketName = process.env.AWS_BUCKET_NAME;
- const uploadCommand = new PutObjectCommand({
+  const uploadCommand = new PutObjectCommand({
     Bucket: bucketName,
     Key: filename,
     Body: buffer,
