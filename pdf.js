@@ -21,12 +21,6 @@ export async function createPdfFromText(text, options = {}) {
     console.log('[createPdfFromText] PDF generation complete.');
   });
 
-  const safePageBreak = (doc, threshold = 100) => {
-    if (doc.y > doc.page.height - doc.page.margins.bottom - threshold) {
-      doc.addPage();
-    }
-  };
-
   if (options.type === 'shoppingList') {
     const sections = text.split(/(?=^[A-Za-z ]+:)/m);
     sections.forEach(section => {
@@ -34,7 +28,6 @@ export async function createPdfFromText(text, options = {}) {
       const headingLine = lines[0].trim();
       const heading = headingLine.replace(/:$/, '');
 
-      safePageBreak(doc);
       doc.moveDown(1);
       doc.font('Helvetica-Bold').fontSize(13).text(heading);
       doc.moveDown(0.3);
@@ -42,87 +35,18 @@ export async function createPdfFromText(text, options = {}) {
       lines.slice(1).join(',').split(/,\s*/).forEach(item => {
         const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
         if (cleanedItem) {
-          safePageBreak(doc);
           doc.font('Helvetica').fontSize(12).text(cleanedItem);
         }
       });
 
       doc.moveDown(1.5);
     });
-  } else if (options.type === 'recipes') {
-    const lines = text.split('\n');
-    let inIngredients = false;
-    let inInstructions = false;
-
-    lines.forEach((line, idx) => {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        doc.moveDown(1);
-        return;
-      }
-
-      safePageBreak(doc);
-
-      if (/^(Breakfast|Lunch|Supper|Snack):\s*/i.test(trimmed)) {
-        doc.moveDown(1);
-        doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
-      } else if (/^Ingredients:/i.test(trimmed)) {
-        inIngredients = true;
-        inInstructions = false;
-        doc.moveDown(0.3);
-        doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
-      } else if (/^Instructions:/i.test(trimmed)) {
-        inIngredients = false;
-        inInstructions = true;
-        doc.moveDown(0.3);
-        doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
-      } else if (/^Prep.*Time:/i.test(trimmed)) {
-        inIngredients = false;
-        inInstructions = false;
-        doc.moveDown(0.3);
-        doc.font('Helvetica').fontSize(12).text(trimmed);
-      } else if (/^Macros:/i.test(trimmed)) {
-        inIngredients = false;
-        inInstructions = false;
-        doc.font('Helvetica').fontSize(12).text(trimmed);
-        doc.moveDown(2);
-      } else if (/^\*.*\*$/g.test(trimmed)) {
-        const recipeName = trimmed.replace(/\*/g, '');
-        doc.moveDown(0.5);
-        doc.font('Helvetica-Bold').fontSize(13).text(recipeName);
-      } else {
-        if (inIngredients) {
-          doc.font('Helvetica').fontSize(12).text(trimmed);
-        } else if (inInstructions && /^\d+\.\s+/.test(trimmed)) {
-          doc.font('Helvetica').fontSize(12).text(trimmed);
-        } else {
-          doc.font('Helvetica').fontSize(12).text(trimmed);
-        }
-      }
-    });
+  } else if (options.type === 'columns') {
+    renderRecipeTextInColumns(doc, text);
   } else {
-    const lines = text.split('\n');
-    lines.forEach((line, idx) => {
-      const trimmed = line.trim();
-      safePageBreak(doc);
-
-      if (/^Meal Plan for /i.test(trimmed)) {
-        doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
-      } else if (/^(Day \d+:\s+\w+day.*?)$/i.test(trimmed)) {
-        doc.moveDown(0.5);
-        doc.font('Helvetica-Bold').fontSize(12).text(trimmed);
-      } else if (/^(Day \d+:\s+.*?)$/i.test(trimmed)) {
-        doc.moveDown(0.5);
-        doc.font('Helvetica-Bold').fontSize(12).text(trimmed);
-      } else if (/^(Breakfast|Lunch|Supper|Snack):/i.test(trimmed)) {
-        const label = trimmed.split(':')[0];
-        const name = trimmed.split(':').slice(1).join(':');
-        doc.font('Helvetica').fontSize(12).text(`${label}: ${name}`);
-      } else {
-        doc.font('Helvetica').fontSize(12).text(trimmed);
-      }
-
-      if (idx < lines.length - 1) doc.moveDown(0.5);
+    doc.font('Helvetica');
+    text.split('\n').forEach((line) => {
+      doc.text(line.trim()).moveDown(0.5);
     });
   }
 
@@ -136,8 +60,63 @@ export async function createPdfFromText(text, options = {}) {
   });
 }
 
+function renderRecipeTextInColumns(doc, text) {
+  const columnWidth = 250;
+  const gutter = 30;
+  const leftMargin = doc.page.margins.left;
+  const topMargin = doc.page.margins.top;
+
+  let x = leftMargin;
+  let y = topMargin;
+  const recipes = text.split(/(?=^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday) (Breakfast|Lunch|Supper):)/m);
+
+  recipes.forEach(recipe => {
+    const lines = recipe.trim().split('\n');
+    if (lines.length === 0) return;
+
+    // Bolded title
+    doc.font('Helvetica-Bold').fontSize(14).text(lines[0], x, y, { width: columnWidth, align: 'left' });
+    y = doc.y + 5;
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (/^Ingredients:/i.test(line)) {
+        doc.font('Helvetica-Bold').text('Ingredients:', x, y, { width: columnWidth });
+        y = doc.y + 2;
+      } else if (/^Instructions:/i.test(line)) {
+        doc.font('Helvetica-Bold').text('Instructions:', x, y, { width: columnWidth });
+        y = doc.y + 2;
+      } else if (/^Prep & Cook Time:/i.test(line)) {
+        doc.font('Helvetica').text(line, x, y, { width: columnWidth });
+        y = doc.y + 2;
+      } else if (/^Macros:/i.test(line)) {
+        doc.font('Helvetica').text(line, x, y, { width: columnWidth });
+        y = doc.y + 20;
+        continue;
+      } else {
+        doc.font('Helvetica').text(line, x, y, { width: columnWidth });
+        y = doc.y + 2;
+      }
+
+      if (y + 100 > doc.page.height - doc.page.margins.bottom) {
+        if (x + columnWidth + gutter < doc.page.width - doc.page.margins.right) {
+          x += columnWidth + gutter;
+          y = topMargin;
+        } else {
+          doc.addPage();
+          x = leftMargin;
+          y = topMargin;
+        }
+      }
+    }
+  });
+}
+
 export async function uploadPdfToS3(buffer, filename) {
+  console.log(`[uploadPdfToS3] Uploading ${filename} to S3...`);
+
   const bucketName = process.env.AWS_BUCKET_NAME;
+
   const uploadCommand = new PutObjectCommand({
     Bucket: bucketName,
     Key: filename,
