@@ -57,7 +57,6 @@ export async function createPdfFromText(text, options = {}) {
     const lines = text.split('\n');
     let inIngredients = false;
     let inInstructions = false;
-    let recipeCount = 0;
 
     lines.forEach((line, idx) => {
       const trimmed = line.trim();
@@ -66,18 +65,12 @@ export async function createPdfFromText(text, options = {}) {
         return;
       }
 
-      if (/^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday) (Breakfast|Lunch|Supper):/i.test(trimmed)) {
-        if (recipeCount > 0) {
-          doc.addPage();
-        }
-        recipeCount++;
-        doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
-        return;
-      }
-
       safePageBreak(doc);
 
-      if (/^Ingredients:/i.test(trimmed)) {
+      if (/^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday) (Breakfast|Lunch|Supper):/i.test(trimmed)) {
+        if (idx > 0) doc.addPage();
+        doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
+      } else if (/^Ingredients:/i.test(trimmed)) {
         inIngredients = true;
         inInstructions = false;
         doc.moveDown(0.3);
@@ -96,11 +89,7 @@ export async function createPdfFromText(text, options = {}) {
         inIngredients = false;
         inInstructions = false;
         doc.font('Helvetica').fontSize(12).text(trimmed);
-        doc.moveDown(2);
-      } else if (/^\*.*\*$/g.test(trimmed)) {
-        const recipeName = trimmed.replace(/\*/g, '');
-        doc.moveDown(0.5);
-        doc.font('Helvetica-Bold').fontSize(13).text(recipeName);
+        doc.addPage();
       } else {
         if (inIngredients) {
           doc.font('Helvetica').fontSize(12).text(trimmed);
