@@ -65,7 +65,7 @@ export async function createPdfFromText(text, options = {}) {
       }
 
       if (/^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday) (Breakfast|Lunch|Supper):/i.test(trimmed)) {
-        doc.addPage();
+        if (idx !== 0) doc.addPage();
         doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
         return;
       }
