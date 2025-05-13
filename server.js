@@ -1,4 +1,3 @@
-
 // server.js
 import express from 'express';
 import bodyParser from 'body-parser';
@@ -36,7 +35,7 @@ function weekdaySequence(startDay, duration) {
 
 function extractRelevantInsights(calendarInsights, startDay, duration) {
   const days = weekdaySequence(startDay, duration);
-  const insights = calendarInsights.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+  const insights = calendarInsights.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
   return insights.filter(line => days.some(day => line.toLowerCase().includes(day.toLowerCase()))).join(', ');
 }
 
@@ -84,7 +83,10 @@ Instructions:
 - Meals should be simple, realistic, and vary throughout the week
 - Omit detailed ingredients and instructions in this view
 - End with a shopping list that combines all ingredients and subtracts on-hand items.
-Use U.S. measurements. Group ingredients by type (Produce, Meat, Dairy, etc.)`;
+- Calculate total ingredient quantities based on household size
+- Use U.S. measurements (e.g., cups, oz, lbs)
+- Group shopping list items by category (Produce, Meat, Dairy, etc.)
+- Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -113,13 +115,14 @@ Meal Plan:
 ${mealPlan}
 
 Include:
-- Title (bold)
-- Ingredients listed with quantities for ${householdSize} people (use U.S. system)
-- Step-by-step instructions
+- Title (include day and meal type)
+- Ingredients listed clearly with accurate U.S. measurements and scaled for ${householdSize} people
+- Step-by-step cooking instructions
 - Prep & cook time
 - Macros per serving
-- Mention meat cut (e.g., ground beef, sirloin, thighs)
-- Separate each recipe clearly and do NOT use placeholders.`;
+- Use clear formatting
+- Be specific about meat cuts (e.g., ground beef, chicken thighs, sirloin)
+- Separate recipes with a line break, and make the title bold.`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -171,9 +174,7 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
     let filename = '';
 
     if (type === 'mealplan') {
-      content = `Meal Plan for ${cache.name}
-
-${cache.mealPlan}`;
+      content = `Meal Plan for ${cache.name}\n\n${cache.mealPlan}`;
       filename = `${sessionId}-mealplan.pdf`;
     } else if (type === 'recipes') {
       content = cache.recipes;
