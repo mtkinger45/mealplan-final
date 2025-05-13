@@ -40,7 +40,10 @@ export async function createPdfFromText(text, options = {}) {
       doc.moveDown(0.3);
 
       lines.slice(1).forEach(item => {
-        const cleanedItem = item.trim().replace(/^[-–•]\s*/, '').replace(/^(.*?):\s*(\d+)/, '$2 $1');
+        const cleanedItem = item.trim()
+          .replace(/^[-–•]\s*/, '')
+          .replace(/^(\d+)\s+(\w+)\s+(\w+)$/, '$1 $3 $2')
+          .replace(/^(\w+):\s*(\d+)$/, '$2 $1');
         if (cleanedItem) {
           safePageBreak(doc);
           doc.font('Helvetica').fontSize(12).text(`• ${cleanedItem}`);
