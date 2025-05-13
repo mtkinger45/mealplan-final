@@ -42,8 +42,9 @@ export async function createPdfFromText(text, options = {}) {
       lines.slice(1).forEach(item => {
         const cleanedItem = item.trim()
           .replace(/^[-–•]\s*/, '')
-          .replace(/^\d+\s+([a-zA-Z]+)\s+(.*)/, '$2 ($1)')
+          .replace(/^(\d+)\s+(\w+)\s+(.*)/, '$1 $2 $3')
           .replace(/^([a-zA-Z]+):\s*(\d+)$/, '$2 $1');
+
         if (cleanedItem) {
           safePageBreak(doc);
           doc.font('Helvetica').fontSize(12).text(`• ${cleanedItem}`);
