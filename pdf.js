@@ -1,4 +1,3 @@
-// pdf.js
 import PDFDocument from 'pdfkit';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -29,7 +28,18 @@ export async function createPdfFromText(text, options = {}) {
 
   if (options.type === 'shoppingList') {
     const sections = text.split(/(?=^[A-Za-z ]+:)/m);
+    const onHandSection = [];
+    const otherSections = [];
+
     sections.forEach(section => {
+      if (section.includes('• On-hand Ingredients Used:')) {
+        onHandSection.push(section);
+      } else {
+        otherSections.push(section);
+      }
+    });
+
+    [...otherSections, ...onHandSection].forEach(section => {
       const lines = section.trim().split('\n');
       const headingLine = lines[0].trim();
       const heading = headingLine.replace(/:$/, '');
@@ -53,7 +63,9 @@ export async function createPdfFromText(text, options = {}) {
 
       doc.moveDown(1.5);
     });
-  } else if (options.type === 'recipes') {
+  }
+
+  else if (options.type === 'recipes') {
     const lines = text.split('\n');
     let inIngredients = false;
     let inInstructions = false;
@@ -100,7 +112,9 @@ export async function createPdfFromText(text, options = {}) {
         }
       }
     });
-  } else {
+  }
+
+  else {
     const lines = text.split('\n');
     lines.forEach((line, idx) => {
       const trimmed = line.trim();
