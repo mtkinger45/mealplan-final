@@ -71,6 +71,9 @@ Include:
         temperature: 0.7,
         max_tokens: 1000
       });
+  const result = completion.choices?.[0]?.message?.content;
+  console.log('[RECIPE RAW OUTPUT]', result?.slice(0, 500));
+  return stripFormatting(result || '');
 
       const result = completion.choices?.[0]?.message?.content;
   console.log('[RECIPE RAW OUTPUT]', result?.slice(0, 500));
