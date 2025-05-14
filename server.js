@@ -163,9 +163,14 @@ Include:
   }
 
   const fullRecipes = recipes.join('\n\n---\n\n');
-    console.log('[RECIPE DEBUG] Recipe output length:', fullRecipes.length);
-    console.log('[RECIPE DEBUG] First 300 characters:', fullRecipes.slice(0, 300));
-    return fullRecipes;
+if (!fullRecipes.trim()) {
+  console.warn('[RECIPE DEBUG] No valid recipes extracted from meal plan.');
+  return '**No recipes could be generated based on the current meal plan.**';
+}
+console.log('[RECIPE DEBUG] Recipe output length:', fullRecipes.length);
+console.log('[RECIPE DEBUG] First 300 characters:', fullRecipes.slice(0, 300));
+return fullRecipes;
+
 }
 
 app.post('/api/mealplan', async (req, res) => {
