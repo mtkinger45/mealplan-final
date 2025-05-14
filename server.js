@@ -17,15 +17,12 @@ const CACHE_DIR = './cache';
 const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
 console.log('[DEBUG] Configuring CORS');
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS not allowed from this origin'));
-    }
-  },
-  credentials: true
+  origin: 'https://thechaostoconfidencecollective.com',
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 
 console.log('[DEBUG] Applying body-parser middleware');
 app.use(bodyParser.json({ limit: '5mb' }));
