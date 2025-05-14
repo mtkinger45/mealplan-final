@@ -74,7 +74,7 @@ export async function createPdfFromText(text, options = {}) {
       });
     }
 
-    const recipes = text.split(/\n{2,}---+\n{2,}/); // split on "---" separators
+    const recipes = text.split(/\n?-{3,}\n?/); // More flexible separator
     recipes.forEach((recipe, index) => {
       if (index > 0) doc.addPage();
       const lines = recipe.split('\n');
