@@ -114,6 +114,7 @@ Instructions:
 }
 
 async function generateRecipes(data, mealPlan) {
+  async function generateRecipes(data, mealPlan) {
   const { people = 4 } = data;
   const lines = mealPlan.split('\n').filter(l => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(l.trim()));
   const recipes = [];
@@ -162,6 +163,7 @@ ${stripFormatting(result.trim())}
 
   return recipes.join('\n\n---\n\n');
 }
+  async function generateRecipes(data, mealPlan) {
   const { people = 4 } = data;
   const prompt = `You are a recipe writer. Based on the following meal plan, write full recipes for each meal.
 
