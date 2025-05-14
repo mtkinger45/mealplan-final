@@ -9,13 +9,11 @@ import fs from 'fs/promises';
 import path from 'path';
 
 const app = express();
-console.log('[DEBUG] Express app created');
 const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CACHE_DIR = './cache';
 
 const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
-console.log('[DEBUG] Configuring CORS');
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) {
@@ -27,7 +25,6 @@ app.use(cors({
   credentials: true
 }));
 
-console.log('[DEBUG] Applying body-parser middleware');
 app.use(bodyParser.json({ limit: '5mb' }));
 
 function weekdaySequence(startDay, duration) {
@@ -90,8 +87,6 @@ Instructions:
 - Group shopping list items by category (Produce, Meat, Dairy, etc.)
 - Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities`;
 
-  console.log('[MEALPLAN REQUEST]', data);
-
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
     messages: [
@@ -105,7 +100,6 @@ Instructions:
   const result = completion.choices?.[0]?.message?.content || '';
   const [mealPlanPart, shoppingListPart] = result.split(/(?=Shopping List)/i);
 
-  console.log('[MEAL PLAN OK]');
   return {
     mealPlan: stripFormatting(mealPlanPart?.trim() || ''),
     shoppingList: stripFormatting(shoppingListPart?.trim() || 'Shopping list coming soon...')
@@ -114,45 +108,54 @@ Instructions:
 
 async function generateRecipes(data, mealPlan) {
   const { people = 4 } = data;
+  const lines = mealPlan.split('\n').filter(l =>
+    /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(l.trim())
+  );
+  const recipes = [];
 
-  const prompt = `You are a recipe writer. Based on the following meal plan, write full recipes for each meal.
+  for (const line of lines) {
+    const match = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):\s*(.*)$/i);
+    if (!match) continue;
 
-Meal Plan:
-${mealPlan}
+    const [_, day, mealType, title] = match;
+    const prompt = `You are a recipe writer. Write a full recipe for the following meal.
+
+Meal Title: ${title}
+Day: ${day}
+Meal Type: ${mealType}
+Servings: ${people}
 
 Include:
-- Title (include day and meal type)
-- Ingredients listed clearly with accurate U.S. measurements and scaled for ${people} people
+- Ingredients listed clearly with accurate U.S. measurements for ${people} people
 - Step-by-step cooking instructions
 - Prep & cook time
 - Macros per serving
-- Use clear formatting
-- Be specific about meat cuts (e.g., ground beef, chicken thighs, sirloin)
-- Separate recipes with a line break, and make the title bold.`;
+- Format cleanly and label sections
+- Use realistic, whole food ingredients`;
 
-  console.log('[RECIPE GEN] Submitting to GPT...');
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4',
-    messages: [
-      { role: 'system', content: 'You are a professional recipe writer.' },
-      { role: 'user', content: prompt }
-    ],
-    temperature: 0.7,
-    max_tokens: 4000
-  });
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        { role: 'system', content: 'You are a professional recipe writer.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 1000
+    });
 
-  const result = completion.choices?.[0]?.message?.content?.trim() || '';
-  console.log('[RECIPE GEN] Output length:', result.length);
-  console.log('[RECIPE GEN] Preview:', result.slice(0, 300));
+    const result = completion.choices?.[0]?.message?.content?.trim();
+    if (result) {
+      recipes.push(`**${day} ${mealType}: ${title}**\n${stripFormatting(result)}`);
+    }
+  }
 
-  return result || '**No recipes could be generated based on the current meal plan.**';
+  return recipes.join('\n\n---\n\n');
 }
 
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
     const sessionId = randomUUID();
-
     const mealPlanData = await generateMealPlanData(data);
     const recipes = await generateRecipes(data, mealPlanData.mealPlan);
 
@@ -163,7 +166,6 @@ app.post('/api/mealplan', async (req, res) => {
       recipes
     }, null, 2));
 
-    console.log('[RESPONSE OK]', { sessionId });
     res.json({
       sessionId,
       mealPlan: mealPlanData.mealPlan,
