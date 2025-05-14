@@ -30,6 +30,9 @@ app.use(cors({
 console.log('[DEBUG] Applying body-parser middleware');
 app.use(bodyParser.json({ limit: '5mb' }));
 
+try {
+  console.log('[DEBUG] Entering route and server setup');
+
 function weekdaySequence(startDay, duration) {
   const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const startIndex = weekdays.indexOf(startDay);
@@ -201,7 +204,8 @@ Include:
 
 
 console.log('[DEBUG] Registering /api/mealplan endpoint');
-app.post('/api/mealplan', async (req, res) => {
+  console.log('[DEBUG] Registering /api/mealplan endpoint');
+  app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
     const sessionId = randomUUID();
@@ -266,9 +270,13 @@ ${cache.mealPlan}`;
   }
 });
 
-console.log('[DEBUG] Preparing to bind port...');
-app.listen(PORT, () => {
+  console.log('[DEBUG] Preparing to bind port...');
+  app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 }
+}
+
+} catch (err) {
+  console.error('[❌ SETUP ERROR]', err);
 }
