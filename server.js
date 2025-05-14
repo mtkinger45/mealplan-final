@@ -9,11 +9,13 @@ import fs from 'fs/promises';
 import path from 'path';
 
 const app = express();
+console.log('[DEBUG] Express app created');
 const PORT = process.env.PORT || 3000;
-const CACHE_DIR = './cache';
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const CACHE_DIR = './cache';
 
 const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
+console.log('[DEBUG] Configuring CORS');
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) {
@@ -25,6 +27,7 @@ app.use(cors({
   credentials: true
 }));
 
+console.log('[DEBUG] Applying body-parser middleware');
 app.use(bodyParser.json({ limit: '5mb' }));
 
 function weekdaySequence(startDay, duration) {
@@ -88,6 +91,7 @@ Instructions:
 - Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities`;
 
   console.log('[MEALPLAN REQUEST]', data);
+
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
     messages: [
@@ -100,8 +104,8 @@ Instructions:
 
   const result = completion.choices?.[0]?.message?.content || '';
   const [mealPlanPart, shoppingListPart] = result.split(/(?=Shopping List)/i);
-  console.log('[MEAL PLAN OK]');
 
+  console.log('[MEAL PLAN OK]');
   return {
     mealPlan: stripFormatting(mealPlanPart?.trim() || ''),
     shoppingList: stripFormatting(shoppingListPart?.trim() || 'Shopping list coming soon...')
@@ -110,8 +114,8 @@ Instructions:
 
 async function generateRecipes(data, mealPlan) {
   const { people = 4 } = data;
-  const lines = mealPlan.split('\n').filter(line => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(line.trim()));
-  let finalRecipes = [];
+  const lines = mealPlan.split('\n').filter(l => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(l.trim()));
+  const recipes = [];
 
   for (const line of lines) {
     const match = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):\s*(.*)$/i);
@@ -119,41 +123,41 @@ async function generateRecipes(data, mealPlan) {
 
     const [_, day, mealType, title] = match;
     const prompt = `You are a recipe writer. Write a full recipe for the following meal.
+
 Meal Title: ${title}
 Day: ${day}
 Meal Type: ${mealType}
 Servings: ${people}
+
 Include:
-- Ingredients with accurate U.S. measurements
+- Ingredients listed clearly with accurate U.S. measurements for ${people} people
 - Step-by-step cooking instructions
 - Prep & cook time
 - Macros per serving
-- Clear formatting`;
+- Format cleanly and label sections
+- Use realistic, whole food ingredients`;
 
-    try {
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4',
-        messages: [
-          { role: 'system', content: 'You are a professional recipe writer.' },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.7,
-        max_tokens: 1000
-      });
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        { role: 'system', content: 'You are a professional recipe writer.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 1000
+    });
 
-      const result = completion.choices?.[0]?.message?.content?.trim();
-      if (result) {
-        finalRecipes.push(`**${day} ${mealType}: ${title}**\n${stripFormatting(result)}`);
-      } else {
-        finalRecipes.push(`**${day} ${mealType}: ${title}**\n⚠️ Recipe could not be generated.`);
-      }
-    } catch (err) {
-      console.error(`[RECIPE ERROR] ${day} ${mealType}: ${title}`, err);
-      finalRecipes.push(`**${day} ${mealType}: ${title}**\n⚠️ Recipe generation error.`);
+    const result = completion.choices?.[0]?.message?.content;
+    if (result) {
+      recipes.push(`${day} ${mealType}:
+${result.trim()}`);
+    } else {
+      recipes.push(`${day} ${mealType}:
+⚠️ Recipe could not be generated.`);
     }
   }
 
-  return finalRecipes.join('\n\n---\n\n');
+  return recipes.join('\n\n---\n\n');
 }
 
 app.post('/api/mealplan', async (req, res) => {
@@ -170,9 +174,15 @@ app.post('/api/mealplan', async (req, res) => {
       recipes
     }, null, 2));
 
-    res.json({ sessionId, ...mealPlanData, recipes });
+    console.log('[RESPONSE OK]', { sessionId });
+    res.json({
+      sessionId,
+      mealPlan: mealPlanData.mealPlan,
+      shoppingList: mealPlanData.shoppingList,
+      recipes
+    });
   } catch (err) {
-    console.error('[API ERROR]', err);
+    console.error('[API ERROR]', err.message);
     res.status(500).json({ error: 'Error generating meal plan.' });
   }
 });
@@ -212,4 +222,6 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
