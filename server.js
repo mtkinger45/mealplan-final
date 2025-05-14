@@ -116,7 +116,7 @@ async function generateRecipes(data, mealPlan) {
   console.log('[RECIPE GEN] Starting generation...');
 
   const { people = 4 } = data;
-  const lines = mealPlan.split('
+  const lines = mealPlan.split('\n')
 ').filter(l =>
     /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(l.trim())
   );
