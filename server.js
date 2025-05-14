@@ -70,13 +70,8 @@ Include:
         ],
         temperature: 0.7,
         max_tokens: 1000
-      });
-  const result = completion.choices?.[0]?.message?.content;
-  console.log('[RECIPE RAW OUTPUT]', result?.slice(0, 500));
-  return stripFormatting(result || '');
-
-      const result = completion.choices?.[0]?.message?.content;
-  console.log('[RECIPE RAW OUTPUT]', result?.slice(0, 500));
+      });console.log('[RECIPE RAW OUTPUT]', result?.slice(0, 500));
+  return stripFormatting(result || '');console.log('[RECIPE RAW OUTPUT]', result?.slice(0, 500));
       if (result) {
         recipes.push(`**${day} ${mealType}: ${title}**\n${stripFormatting(result.trim())}\n`);
       } else {
