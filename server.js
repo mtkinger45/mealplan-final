@@ -113,6 +113,40 @@ Instructions:
 }
 
 async function generateRecipes(data, mealPlan) {
+  const { people = 4 } = data;
+
+  const prompt = `You are a recipe writer. Based on the following meal plan, write full recipes for each meal.
+
+Meal Plan:
+${mealPlan}
+
+Include:
+- Title (include day and meal type)
+- Ingredients listed clearly with accurate U.S. measurements and scaled for ${people} people
+- Step-by-step cooking instructions
+- Prep & cook time
+- Macros per serving
+- Use clear formatting
+- Be specific about meat cuts (e.g., ground beef, chicken thighs, sirloin)
+- Separate recipes with a line break, and make the title bold.`;
+
+  console.log('[RECIPE GEN] Submitting to GPT...');
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [
+      { role: 'system', content: 'You are a professional recipe writer.' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.7,
+    max_tokens: 4000
+  });
+
+  const result = completion.choices?.[0]?.message?.content?.trim() || '';
+  console.log('[RECIPE GEN] Output length:', result.length);
+  console.log('[RECIPE GEN] Preview:', result.slice(0, 300));
+
+  return result || '**No recipes could be generated based on the current meal plan.**';
+}
   console.log('[RECIPE GEN] Starting generation...');
 
   const { people = 4 } = data;
@@ -165,70 +199,7 @@ Include:
   const fullRecipes = recipes.join('\n\n---\n\n');
 if (!fullRecipes.trim()) {
   console.warn('[RECIPE DEBUG] No valid recipes extracted from meal plan.');
-  
-    const lines = mealPlan.split('\n');
-    const recipeLines = [];
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      const match = trimmed.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)(.*?)\s(Breakfast|Lunch|Supper)[:\-–]\s*(.*)$/i);
-      if (match) {
-        recipeLines.push({
-          fullLine: trimmed,
-          day: match[1],
-          mealType: match[3],
-          title: match[4]
-        });
-      }
-    }
-
-    console.log('[RECIPE DEBUG] Matched Recipes:', recipeLines.length);
-    if (!recipeLines.length) {
-      return '**No recipes could be generated based on the current meal plan.**';
-    }
-
-    const recipes = [];
-
-    for (const item of recipeLines) {
-      const { day, mealType, title } = item;
-      const prompt = `You are a recipe writer. Write a full recipe for the following meal.
-
-Meal Title: ${title}
-Day: ${day}
-Meal Type: ${mealType}
-Servings: ${people}
-
-Include:
-- Ingredients listed clearly with accurate U.S. measurements for ${people} people
-- Step-by-step cooking instructions
-- Prep & cook time
-- Macros per serving
-- Format cleanly and label sections
-- Use realistic, whole food ingredients`;
-
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4',
-        messages: [
-          { role: 'system', content: 'You are a professional recipe writer.' },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.7,
-        max_tokens: 1000
-      });
-
-      const result = completion.choices?.[0]?.message?.content;
-      if (result) {
-        recipes.push(`**${day} ${mealType}: ${title}**\n${stripFormatting(result.trim())}\n`);
-      } else {
-        recipes.push(`**${day} ${mealType}: ${title}**\n⚠️ Recipe could not be generated.\n`);
-      }
-    }
-
-    const fullRecipes = recipes.join('\n\n---\n\n');
-    console.log('[RECIPE DEBUG] Output length:', fullRecipes.length);
-    console.log('[RECIPE DEBUG] Preview:', fullRecipes.slice(0, 300));
-    return fullRecipes;
-
+  return '**No recipes could be generated based on the current meal plan.**';
 }
 console.log('[RECIPE DEBUG] Recipe output length:', fullRecipes.length);
 console.log('[RECIPE DEBUG] First 300 characters:', fullRecipes.slice(0, 300));
