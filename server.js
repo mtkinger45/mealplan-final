@@ -56,7 +56,7 @@ async function generateMealPlanData(data) {
     onHandIngredients = 'None',
     calendarInsights = 'None',
     feedback = '',
-    householdSize = 4,
+    peopleSize = 4,
     name = 'Guest'
   } = data;
 
@@ -72,7 +72,7 @@ User Info:
 - Special Requests: ${cookingRequests}
 - Appliances: ${appliances.join(', ') || 'None'}
 - On-hand Ingredients: ${onHandIngredients}
-- Household size: ${householdSize}
+- People size: ${PeopleSize}
 - Calendar Insights: ${cleanedInsights || 'None'}
 ${feedbackText}
 
@@ -83,7 +83,7 @@ Instructions:
 - Meals should be simple, realistic, and vary throughout the week
 - Omit detailed ingredients and instructions in this view
 - End with a shopping list that combines all ingredients and subtracts on-hand items.
-- Calculate total ingredient quantities based on household size
+- Calculate total ingredient quantities based on people size
 - Use U.S. measurements (e.g., cups, oz, lbs)
 - Group shopping list items by category (Produce, Meat, Dairy, etc.)
 - Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities`;
@@ -108,7 +108,7 @@ Instructions:
 }
 
 async function generateRecipes(data, mealPlan) {
-  const { householdSize = 4 } = data;
+  const { peopleSize = 4 } = data;
   const prompt = `You are a recipe writer. Based on the following meal plan, write full recipes for each meal.
 
 Meal Plan:
@@ -116,7 +116,7 @@ ${mealPlan}
 
 Include:
 - Title (include day and meal type)
-- Ingredients listed clearly with accurate U.S. measurements and scaled for ${householdSize} people
+- Ingredients listed clearly with accurate U.S. measurements and scaled for ${peopleSize} people
 - Step-by-step cooking instructions
 - Prep & cook time
 - Macros per serving
