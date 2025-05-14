@@ -74,10 +74,17 @@ export async function createPdfFromText(text, options = {}) {
       });
     }
 
-    const recipes = text.split(/\n?-{3,}\n?/); // More flexible separator
+    const recipes = text.split(/\n?-{3,}\n?/);
     recipes.forEach((recipe, index) => {
+      const clean = recipe.replace(/[^       const clean = recipe.replace(/[^\x20-~      const clean = recipe.replace(/[^\x20-\x7E\n\r]+/g, '').trim();
+      if (!clean) {
+        if (index > 0) doc.addPage();
+        doc.font('Helvetica-Bold').fontSize(12).text(`⚠️ Recipe ${index + 1} could not be rendered.`);
+        return;
+      }
+
+      const lines = clean.split('\n');
       if (index > 0) doc.addPage();
-      const lines = recipe.split('\n');
 
       lines.forEach(line => {
         const trimmed = line.trim();
