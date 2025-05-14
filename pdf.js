@@ -1,4 +1,4 @@
-//pdf.js//
+//pdf.js
 import PDFDocument from 'pdfkit';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -68,6 +68,15 @@ export async function createPdfFromText(text, options = {}) {
   }
 
   else if (options.type === 'recipes') {
+  console.log('[PDF DEBUG] Generating recipe PDF...');
+  if (!text || text.trim().length === 0) {
+    doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
+    doc.end();
+    return new Promise((resolve) => {
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+    });
+  }
+
     const lines = text.split('\n');
     let inIngredients = false;
     let inInstructions = false;
