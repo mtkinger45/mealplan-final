@@ -116,7 +116,8 @@ async function generateRecipes(data, mealPlan) {
   console.log('[RECIPE GEN] Starting generation...');
 
   const { people = 4 } = data;
-  const lines = mealPlan.split('\n').filter(l =>
+  const lines = mealPlan.split('
+').filter(l =>
     /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(l.trim())
   );
 
@@ -127,7 +128,7 @@ async function generateRecipes(data, mealPlan) {
     if (!match) continue;
 
     const [_, day, mealType, title] = match;
-    const prompt = \`You are a recipe writer. Write a full recipe for the following meal.
+    const prompt = `You are a recipe writer. Write a full recipe for the following meal.
 
 Meal Title: \${title}
 Day: \${day}
@@ -140,7 +141,7 @@ Include:
 - Prep & cook time
 - Macros per serving
 - Format cleanly and label sections
-- Use realistic, whole food ingredients\`;
+- Use realistic, whole food ingredients`;
 
     try {
       const completion = await openai.chat.completions.create({
@@ -154,15 +155,21 @@ Include:
       });
 
       const result = completion.choices?.[0]?.message?.content;
-      console.log(\`[RECIPE OUTPUT for \${day} \${mealType}]:\`, result?.slice(0, 200));
-      recipes.push(\`**\${day} \${mealType}: \${title}**\n\${stripFormatting(result?.trim() || '⚠️ Recipe could not be generated.')}\`);
+      console.log(`[RECIPE OUTPUT for \${day} \${mealType}]:`, result?.slice(0, 200));
+      recipes.push(`**\${day} \${mealType}: \${title}**
+\${stripFormatting(result?.trim() || '⚠️ Recipe could not be generated.')}`);
     } catch (err) {
-      console.error(\`[ERROR generating recipe for \${day} \${mealType}]:\`, err);
-      recipes.push(\`**\${day} \${mealType}: \${title}**\n⚠️ Recipe generation failed due to an error.\`);
+      console.error(`[ERROR generating recipe for \${day} \${mealType}]:`, err);
+      recipes.push(`**\${day} \${mealType}: \${title}**
+⚠️ Recipe generation failed due to an error.`);
     }
   }
 
-  return recipes.join('\n\n---\n\n');
+  return recipes.join('
+
+---
+
+');
 }
 
 app.post('/api/mealplan', async (req, res) => {
