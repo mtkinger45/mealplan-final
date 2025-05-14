@@ -112,7 +112,6 @@ Instructions:
   };
 }
 
-);
 
 app.get('/api/pdf/:sessionId', async (req, res) => {
   const { sessionId } = req.params;
