@@ -87,6 +87,8 @@ Instructions:
 - Group shopping list items by category (Produce, Meat, Dairy, etc.)
 - Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities`;
 
+  console.log('[MEALPLAN REQUEST]', data);
+
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
     messages: [
@@ -97,9 +99,14 @@ Instructions:
     max_tokens: 4096
   });
 
+  if (!completion.choices || !completion.choices[0] || !completion.choices[0].message) {
+    throw new Error('Invalid OpenAI response for meal plan');
+  }
+
   const result = completion.choices[0].message.content;
   const [mealPlanPart, shoppingListPart] = result.split(/(?=Shopping List)/i);
 
+  console.log('[MEAL PLAN OK]');
   return {
     mealPlan: stripFormatting(mealPlanPart?.trim() || ''),
     shoppingList: stripFormatting(shoppingListPart?.trim() || 'Shopping list coming soon...')
@@ -133,6 +140,10 @@ Include:
     max_tokens: 8192
   });
 
+  if (!completion.choices || !completion.choices[0] || !completion.choices[0].message) {
+    throw new Error('Invalid OpenAI response for recipes');
+  }
+
   return stripFormatting(completion.choices[0].message.content);
 }
 
@@ -150,6 +161,7 @@ app.post('/api/mealplan', async (req, res) => {
       recipes
     }, null, 2));
 
+    console.log('[RESPONSE OK]', { sessionId });
     res.json({
       sessionId,
       mealPlan: mealPlanData.mealPlan,
@@ -157,7 +169,7 @@ app.post('/api/mealplan', async (req, res) => {
       recipes
     });
   } catch (err) {
-    console.error(err);
+    console.error('[API ERROR]', err.message);
     res.status(500).json({ error: 'Error generating meal plan.' });
   }
 });
