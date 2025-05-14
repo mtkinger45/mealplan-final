@@ -1,3 +1,4 @@
+//pdf.js//
 import PDFDocument from 'pdfkit';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -50,6 +51,7 @@ export async function createPdfFromText(text, options = {}) {
       doc.moveDown(0.3);
 
       lines.slice(1).forEach(item => {
+      safePageBreak(doc);
         const cleanedItem = item.trim()
           .replace(/^[-–•]\s*/, '')
           .replace(/^([\d.]+)\s+(\w+)\s+(.*)/, '$1 $3 $2')
@@ -80,7 +82,7 @@ export async function createPdfFromText(text, options = {}) {
       safePageBreak(doc);
 
       if (/^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday) (Breakfast|Lunch|Supper):/i.test(trimmed)) {
-        if (idx > 0) doc.addPage();
+        doc.addPage();
         doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
       } else if (/^Ingredients:/i.test(trimmed)) {
         inIngredients = true;
