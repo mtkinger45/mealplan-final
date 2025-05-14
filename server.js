@@ -192,7 +192,7 @@ Include:
     throw new Error('Invalid OpenAI response for recipes');
   }
 
-  return stripFormatting(completion.choices[0].message.content);
+  
 }
 
 app.post('/api/mealplan', async (req, res) => {
