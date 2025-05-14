@@ -112,49 +112,6 @@ Instructions:
   };
 }
 
-
-app.get('/api/pdf/:sessionId', async (req, res) => {
-  const { sessionId } = req.params;
-  const { type } = req.query;
-  const filePath = path.join(CACHE_DIR, `${sessionId}.json`);
-
-  try {
-    const cache = JSON.parse(await fs.readFile(filePath, 'utf-8'));
-    let content = '';
-    let filename = '';
-
-    if (type === 'mealplan') {
-      content = `Meal Plan for ${cache.name}
-
-${cache.mealPlan}`;
-      filename = `${sessionId}-mealplan.pdf`;
-    } else if (type === 'recipes') {
-      content = cache.recipes;
-      filename = `${sessionId}-recipes.pdf`;
-    } else if (type === 'shopping-list') {
-      content = cache.shoppingList;
-      filename = `${sessionId}-shopping.pdf`;
-    } else {
-      return res.status(400).json({ error: 'Invalid type parameter.' });
-    }
-
-    const buffer = await createPdfFromText(content, {
-      type: type === 'shopping-list' ? 'shoppingList' : (type === 'recipes' ? 'columns' : undefined)
-    });
-
-    const url = await uploadPdfToS3(buffer, filename);
-    res.json({ url });
-  } catch (err) {
-    console.error('PDF generation error:', err);
-    res.status(404).json({ error: 'PDF or session not found.' });
-  }
-});
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-
 async function generateRecipes(data, mealPlan) {
   const { people = 4 } = data;
 
@@ -190,3 +147,70 @@ Include:
 
   return result || '**No recipes could be generated based on the current meal plan.**';
 }
+
+app.post('/api/mealplan', async (req, res) => {
+  try {
+    const data = req.body;
+    const sessionId = randomUUID();
+
+    const mealPlanData = await generateMealPlanData(data);
+    const recipes = await generateRecipes(data, mealPlanData.mealPlan);
+
+    await fs.mkdir(CACHE_DIR, { recursive: true });
+    await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify({
+      name: data.name || 'Guest',
+      ...mealPlanData,
+      recipes
+    }, null, 2));
+
+    console.log('[RESPONSE OK]', { sessionId });
+    res.json({
+      sessionId,
+      mealPlan: mealPlanData.mealPlan,
+      shoppingList: mealPlanData.shoppingList,
+      recipes
+    });
+  } catch (err) {
+    console.error('[API ERROR]', err.message);
+    res.status(500).json({ error: 'Error generating meal plan.' });
+  }
+});
+
+app.get('/api/pdf/:sessionId', async (req, res) => {
+  const { sessionId } = req.params;
+  const { type } = req.query;
+  const filePath = path.join(CACHE_DIR, `${sessionId}.json`);
+
+  try {
+    const cache = JSON.parse(await fs.readFile(filePath, 'utf-8'));
+    let content = '';
+    let filename = '';
+
+    if (type === 'mealplan') {
+      content = `Meal Plan for ${cache.name}\n\n${cache.mealPlan}`;
+      filename = `${sessionId}-mealplan.pdf`;
+    } else if (type === 'recipes') {
+      content = cache.recipes;
+      filename = `${sessionId}-recipes.pdf`;
+    } else if (type === 'shopping-list') {
+      content = cache.shoppingList;
+      filename = `${sessionId}-shopping.pdf`;
+    } else {
+      return res.status(400).json({ error: 'Invalid type parameter.' });
+    }
+
+    const buffer = await createPdfFromText(content, {
+      type: type === 'shopping-list' ? 'shoppingList' : (type === 'recipes' ? 'columns' : undefined)
+    });
+
+    const url = await uploadPdfToS3(buffer, filename);
+    res.json({ url });
+  } catch (err) {
+    console.error('PDF generation error:', err);
+    res.status(404).json({ error: 'PDF or session not found.' });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
