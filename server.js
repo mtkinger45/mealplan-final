@@ -207,10 +207,9 @@ Instructions:
         filename = `${sessionId}-mealplan.pdf`;
       } else if (type === 'recipes') {
         content = cache.recipes;
+    console.log('[RECIPE PDF] Content length:', content?.length || 0);
+    console.log('[RECIPE PDF] Preview:', content?.slice(0, 500));
         filename = `${sessionId}-recipes.pdf`;
-        console.log('[RECIPE PDF] Content length:', cache.recipes?.length || 0);
-console.log('[RECIPE PDF] Preview:', cache.recipes?.slice(0, 500));
-
       } else if (type === 'shopping-list') {
         content = cache.shoppingList;
         filename = `${sessionId}-shopping.pdf`;
