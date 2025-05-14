@@ -216,7 +216,7 @@ Instructions:
       }
 
       const buffer = await createPdfFromText(content, {
-        type: type === 'shopping-list' ? 'shoppingList' : (type === 'recipes' ? 'columns' : undefined)
+        type: type === 'shopping-list' ? 'shoppingList' : undefined
       });
 
       const url = await uploadPdfToS3(buffer, filename);
