@@ -35,8 +35,7 @@ function weekdaySequence(startDay, duration) {
 
 function extractRelevantInsights(calendarInsights, startDay, duration) {
   const days = weekdaySequence(startDay, duration);
-  const insights = calendarInsights.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
-
+  const insights = calendarInsights.split(/[,]/).map(s => s.trim()).filter(Boolean);
   return insights.filter(line => days.some(day => line.toLowerCase().includes(day.toLowerCase()))).join(', ');
 }
 
@@ -64,20 +63,20 @@ async function generateMealPlanData(data) {
   const cleanedInsights = extractRelevantInsights(calendarInsights, startDay, duration);
   const feedbackText = feedback ? `NOTE: The user has requested this revision: "${feedback}".` : '';
 
-  const prompt = \`You are a professional meal planner. Create a \${duration}-day meal plan that begins on \${startDay}. Each day should include: \${meals.join(', ')}.
+  const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Each day should include: ${meals.join(', ')}.
 User Info:
-- Diet Type: \${dietType}
-- Preferences: \${dietaryPreferences}
-- Cooking Style: \${mealStyle}
-- Special Requests: \${cookingRequests}
-- Appliances: \${appliances.join(', ') || 'None'}
-- On-hand Ingredients: \${onHandIngredients}
-- Household size: \${people}
-- Calendar Insights: \${cleanedInsights || 'None'}
-\${feedbackText}
+- Diet Type: ${dietType}
+- Preferences: ${dietaryPreferences}
+- Cooking Style: ${mealStyle}
+- Special Requests: ${cookingRequests}
+- Appliances: ${appliances.join(', ') || 'None'}
+- On-hand Ingredients: ${onHandIngredients}
+- Household size: ${people}
+- Calendar Insights: ${cleanedInsights || 'None'}
+${feedbackText}
 
 Instructions:
-- Use \${startDay} as the first day and follow correct weekday order
+- Use ${startDay} as the first day and follow correct weekday order
 - Add a note next to the day name if calendar insights are relevant (e.g., Monday – Baseball night)
 - Do NOT use "Day 1", use weekday names only
 - Meals should be simple, realistic, and vary throughout the week
@@ -86,7 +85,7 @@ Instructions:
 - Calculate total ingredient quantities based on household size
 - Use U.S. measurements (e.g., cups, oz, lbs)
 - Group shopping list items by category (Produce, Meat, Dairy, etc.)
-- Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities\`;
+- Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -109,20 +108,20 @@ Instructions:
 
 async function generateRecipes(data, mealPlan) {
   const { people = 4 } = data;
-  const prompt = \`You are a recipe writer. Based on the following meal plan, write full recipes for each meal.
+  const prompt = `You are a recipe writer. Based on the following meal plan, write full recipes for each meal.
 
 Meal Plan:
-\${mealPlan}
+${mealPlan}
 
 Include:
 - Title (include day and meal type)
-- Ingredients listed clearly with accurate U.S. measurements and scaled for \${people} people
+- Ingredients listed clearly with accurate U.S. measurements and scaled for ${people} people
 - Step-by-step cooking instructions
 - Prep & cook time
 - Macros per serving
 - Use clear formatting
 - Be specific about meat cuts (e.g., ground beef, chicken thighs, sirloin)
-- Separate recipes with a line break, and make the title bold.\`;
+- Separate recipes with a line break, and make the title bold.`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -145,7 +144,7 @@ app.post('/api/mealplan', async (req, res) => {
     const recipes = await generateRecipes(data, mealPlanData.mealPlan);
 
     await fs.mkdir(CACHE_DIR, { recursive: true });
-    await fs.writeFile(path.join(CACHE_DIR, \`\${sessionId}.json\`), JSON.stringify({
+    await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify({
       name: data.name || 'Guest',
       ...mealPlanData,
       recipes
@@ -166,7 +165,7 @@ app.post('/api/mealplan', async (req, res) => {
 app.get('/api/pdf/:sessionId', async (req, res) => {
   const { sessionId } = req.params;
   const { type } = req.query;
-  const filePath = path.join(CACHE_DIR, \`\${sessionId}.json\`);
+  const filePath = path.join(CACHE_DIR, `${sessionId}.json`);
 
   try {
     const cache = JSON.parse(await fs.readFile(filePath, 'utf-8'));
@@ -174,14 +173,16 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
     let filename = '';
 
     if (type === 'mealplan') {
-      content = \`Meal Plan for \${cache.name}\n\n\${cache.mealPlan}\`;
-      filename = \`\${sessionId}-mealplan.pdf\`;
+      content = `Meal Plan for ${cache.name}
+
+${cache.mealPlan}`;
+      filename = `${sessionId}-mealplan.pdf`;
     } else if (type === 'recipes') {
       content = cache.recipes;
-      filename = \`\${sessionId}-recipes.pdf\`;
+      filename = `${sessionId}-recipes.pdf`;
     } else if (type === 'shopping-list') {
       content = cache.shoppingList;
-      filename = \`\${sessionId}-shopping.pdf\`;
+      filename = `${sessionId}-shopping.pdf`;
     } else {
       return res.status(400).json({ error: 'Invalid type parameter.' });
     }
@@ -199,5 +200,5 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(\`Server running on port \${PORT}\`);
+  console.log(`Server running on port ${PORT}`);
 });
