@@ -9,11 +9,13 @@ import fs from 'fs/promises';
 import path from 'path';
 
 const app = express();
+console.log('[DEBUG] Express app created');
 const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CACHE_DIR = './cache';
 
 const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
+console.log('[DEBUG] Configuring CORS');
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) {
@@ -25,6 +27,7 @@ app.use(cors({
   credentials: true
 }));
 
+console.log('[DEBUG] Applying body-parser middleware');
 app.use(bodyParser.json({ limit: '5mb' }));
 
 function weekdaySequence(startDay, duration) {
@@ -197,6 +200,7 @@ Include:
   
 
 
+console.log('[DEBUG] Registering /api/mealplan endpoint');
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
@@ -224,6 +228,7 @@ app.post('/api/mealplan', async (req, res) => {
   }
 });
 
+console.log('[DEBUG] Registering /api/pdf/:sessionId endpoint');
 app.get('/api/pdf/:sessionId', async (req, res) => {
   const { sessionId } = req.params;
   const { type } = req.query;
@@ -261,6 +266,7 @@ ${cache.mealPlan}`;
   }
 });
 
+console.log('[DEBUG] Preparing to bind port...');
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
