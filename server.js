@@ -116,8 +116,7 @@ async function generateRecipes(data, mealPlan) {
   console.log('[RECIPE GEN] Starting generation...');
 
   const { people = 4 } = data;
-  const lines = mealPlan.split('\n')
-').filter(l =>
+  const lines = mealPlan.split('\n').filter(l =>
     /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(l.trim())
   );
 
@@ -156,20 +155,14 @@ Include:
 
       const result = completion.choices?.[0]?.message?.content;
       console.log(`[RECIPE OUTPUT for \${day} \${mealType}]:`, result?.slice(0, 200));
-      recipes.push(`**\${day} \${mealType}: \${title}**
-\${stripFormatting(result?.trim() || '⚠️ Recipe could not be generated.')}`);
+      recipes.push(`**\${day} \${mealType}: \${title}**\n\${stripFormatting(result?.trim() || '⚠️ Recipe could not be generated.')}`);
     } catch (err) {
       console.error(`[ERROR generating recipe for \${day} \${mealType}]:`, err);
-      recipes.push(`**\${day} \${mealType}: \${title}**
-⚠️ Recipe generation failed due to an error.`);
+      recipes.push(`**\${day} \${mealType}: \${title}**\n⚠️ Recipe generation failed due to an error.`);
     }
   }
 
-  return recipes.join('
-
----
-
-');
+  return recipes.join('\n\n---\n\n');
 }
 
 app.post('/api/mealplan', async (req, res) => {
