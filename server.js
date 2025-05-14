@@ -193,7 +193,7 @@ Include:
   }
 
   
-}
+
 
 app.post('/api/mealplan', async (req, res) => {
   try {
