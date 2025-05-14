@@ -34,6 +34,8 @@ try {
   console.log('[DEBUG] Entering route and server setup');
 
   async function generateRecipes(data, mealPlan) {
+  console.log('[RECIPE GEN] Starting generation...');
+
     const { people = 4 } = data;
     const lines = mealPlan.split('\n').filter(l =>
       /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(l.trim())
@@ -71,6 +73,7 @@ Include:
       });
 
       const result = completion.choices?.[0]?.message?.content;
+  console.log('[RECIPE RAW OUTPUT]', result?.slice(0, 500));
       if (result) {
         recipes.push(`**${day} ${mealType}: ${title}**\n${stripFormatting(result.trim())}\n`);
       } else {
