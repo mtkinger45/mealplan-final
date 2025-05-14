@@ -96,7 +96,7 @@ Instructions:
       { role: 'user', content: prompt }
     ],
     temperature: 0.7,
-    max_tokens: 4096
+    max_tokens: 3000
   });
 
   if (!completion.choices || !completion.choices[0] || !completion.choices[0].message) {
@@ -137,7 +137,7 @@ Include:
       { role: 'user', content: prompt }
     ],
     temperature: 0.7,
-    max_tokens: 8192
+    max_tokens: 6000
   });
 
   if (!completion.choices || !completion.choices[0] || !completion.choices[0].message) {
