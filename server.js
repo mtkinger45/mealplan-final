@@ -115,6 +115,54 @@ Instructions:
 
 async function generateRecipes(data, mealPlan) {
   const { people = 4 } = data;
+  const lines = mealPlan.split('\n').filter(l => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(l.trim()));
+  const recipes = [];
+
+  for (const line of lines) {
+    const match = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):\s*(.*)$/i);
+    if (!match) continue;
+
+    const [_, day, mealType, title] = match;
+    const prompt = `You are a recipe writer. Write a full recipe for the following meal.
+
+Meal Title: ${title}
+Day: ${day}
+Meal Type: ${mealType}
+Servings: ${people}
+
+Include:
+- Ingredients listed clearly with accurate U.S. measurements for ${people} people
+- Step-by-step cooking instructions
+- Prep & cook time
+- Macros per serving
+- Format cleanly and label sections
+- Use realistic, whole food ingredients`;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        { role: 'system', content: 'You are a professional recipe writer.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 1000
+    });
+
+    const result = completion.choices?.[0]?.message?.content;
+    if (result) {
+      recipes.push(`**${day} ${mealType}: ${title}**
+${stripFormatting(result.trim())}
+`);
+    } else {
+      recipes.push(`**${day} ${mealType}: ${title}**
+⚠️ Recipe could not be generated.
+`);
+    }
+  }
+
+  return recipes.join('\n\n---\n\n');
+}
+  const { people = 4 } = data;
   const prompt = `You are a recipe writer. Based on the following meal plan, write full recipes for each meal.
 
 Meal Plan:
