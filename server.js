@@ -33,50 +33,8 @@ app.use(bodyParser.json({ limit: '5mb' }));
 try {
   console.log('[DEBUG] Entering route and server setup');
 
-  async function generateRecipes(data, mealPlan) {
-  console.log('[RECIPE GEN] Starting generation...');
+  
 
-    const { people = 4 } = data;
-    const lines = mealPlan.split('\n').filter(l =>
-      /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(l.trim())
-    );
-    const recipes = [];
-
-    for (const line of lines) {
-      const match = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):\s*(.*)$/i);
-      if (!match) continue;
-
-      const [_, day, mealType, title] = match;
-      const prompt = `You are a recipe writer. Write a full recipe for the following meal.
-
-Meal Title: ${title}
-Day: ${day}
-Meal Type: ${mealType}
-Servings: ${people}
-
-Include:
-- Ingredients listed clearly with accurate U.S. measurements for ${people} people
-- Step-by-step cooking instructions
-- Prep & cook time
-- Macros per serving
-- Format cleanly and label sections
-- Use realistic, whole food ingredients`;
-
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4',
-        messages: [
-          { role: 'system', content: 'You are a professional recipe writer.' },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.7,
-        max_tokens: 1000
-      });console.log('[RECIPE RAW OUTPUT]', result?.slice(0, 500));
-  return stripFormatting(result || '');console.log('[RECIPE RAW OUTPUT]', result?.slice(0, 500));
-      if (result) {
-        recipes.push(`**${day} ${mealType}: ${title}**\n${stripFormatting(result.trim())}\n`);
-      } else {
-        recipes.push(`**${day} ${mealType}: ${title}**\n⚠️ Recipe could not be generated.\n`);
-      }
     }
 
     return recipes.join('\n\n---\n\n');
