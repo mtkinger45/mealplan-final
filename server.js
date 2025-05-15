@@ -13,15 +13,17 @@ const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CACHE_DIR = './cache';
 
+const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
 app.use(cors({
-  origin: 'https://thechaostoconfidencecollective.com',
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS not allowed from this origin'));
+    }
+  },
   credentials: true
 }));
-
-app.options('*', cors()); // Handle preflight requests
-
 
 app.use(bodyParser.json({ limit: '5mb' }));
 
@@ -61,9 +63,7 @@ async function generateMealPlanData(data) {
   const cleanedInsights = extractRelevantInsights(calendarInsights, startDay, duration);
   const feedbackText = feedback ? `NOTE: The user has requested this revision: "${feedback}".` : '';
 
-  const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}.
-Do not include any other meals (e.g., skip Supper if it's not listed).
-
+  const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Each day should include: ${meals.join(', ')}.
 User Info:
 - Diet Type: ${dietType}
 - Preferences: ${dietaryPreferences}
@@ -125,7 +125,7 @@ async function generateRecipes(data, mealPlan) {
 
 **Meal ${i + 1} Name:** ${title}
 **Ingredients:** (list ingredients with U.S. quantities, scaled for ${people} people)
-**Instructions:** (step-by-step cooking instructions)
+**Instructions:** (step-by-step numbered instructions)
 **Prep & Cook Time:** (e.g., 10 min prep, 20 min cook)
 **Macros per Serving:** (protein, carbs, fat)`;
 
@@ -136,7 +136,7 @@ async function generateRecipes(data, mealPlan) {
         { role: 'user', content: prompt }
       ],
       temperature: 0.7,
-      max_tokens: 800
+      max_tokens: 900
     });
 
     const result = completion.choices?.[0]?.message?.content?.trim();
@@ -145,7 +145,7 @@ async function generateRecipes(data, mealPlan) {
     }
   }
 
-  return recipes.length > 0 ? recipes.join('\n\n') : '**No recipes could be generated based on the current meal plan.**';
+  return recipes.length > 0 ? recipes.join('\n\n---\n\n') : '**No recipes could be generated based on the current meal plan.**';
 }
 
 app.post('/api/mealplan', async (req, res) => {
