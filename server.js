@@ -77,6 +77,7 @@ ${feedbackText}
 
 Instructions:
 - Use ${startDay} as the first day and follow correct weekday order
+- Only include the selected meals: ${meals.join(', ')}
 - Add a note next to the day name if calendar insights are relevant (e.g., Monday – Baseball night)
 - Do NOT use "Day 1", use weekday names only
 - Meals should be simple, realistic, and vary throughout the week
@@ -85,7 +86,7 @@ Instructions:
 - Calculate total ingredient quantities based on household size
 - Use U.S. measurements (e.g., cups, oz, lbs)
 - Group shopping list items by category (Produce, Meat, Dairy, etc.)
-- Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities`;
+- Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities.`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -94,7 +95,7 @@ Instructions:
       { role: 'user', content: prompt }
     ],
     temperature: 0.7,
-    max_tokens: 3000
+    max_tokens: 4000
   });
 
   const result = completion.choices?.[0]?.message?.content || '';
@@ -108,32 +109,46 @@ Instructions:
 
 async function generateRecipes(data, mealPlan) {
   const { people = 4 } = data;
+  const lines = mealPlan.split('\n').filter(l => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(l.trim()));
+  const recipes = [];
 
-  const prompt = `You are a professional recipe writer. Based on the following meal plan, write full recipes for each meal using this exact format:
+  let mealNumber = 1;
+  for (const line of lines) {
+    const match = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):\s*(.*)$/i);
+    if (!match) continue;
 
-**Meal 1 Name:** Scrambled Eggs & Bacon
-**Ingredients:** eggs, bacon, ghee
-**Instructions:** Heat a skillet over medium heat. Cook bacon until crispy. Scramble eggs in a separate pan with ghee.
+    const [_, day, mealType, title] = match;
+    const prompt = `You are a recipe writer. Write a full recipe for the following meal.
+Meal Title: ${title}
+Day: ${day}
+Meal Type: ${mealType}
+Servings: ${people}
+
+Return in this format:
+**Meal ${mealNumber} Name:** ${title}
+**Ingredients:** eggs (4), bacon (6 slices), ghee (1 tbsp)
+**Instructions:** Heat skillet. Cook bacon. Scramble eggs with ghee.
 **Prep & Cook Time:** 5 min prep, 10 min cook
-**Macros per Serving:** Protein: 25g, Fat: 18g, Carbs: 2g
+**Macros per Serving:** Protein: 30g, Fat: 25g, Carbs: 5g`;
 
-Repeat this structure for all meals. Do not add any additional explanation. No headers or footers. No summaries.
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        { role: 'system', content: 'You are a professional recipe writer.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 800
+    });
 
-Meal Plan:
-${mealPlan}`;
+    const result = completion.choices?.[0]?.message?.content?.trim();
+    if (result) {
+      recipes.push(result);
+    }
+    mealNumber++;
+  }
 
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4',
-    messages: [
-      { role: 'system', content: 'You are a professional recipe writer.' },
-      { role: 'user', content: prompt }
-    ],
-    temperature: 0.7,
-    max_tokens: 6000
-  });
-
-  const result = completion.choices?.[0]?.message?.content?.trim() || '';
-  return result.length > 0 ? result : '**No recipes could be generated based on the current meal plan.**';
+  return recipes.join('\n\n');
 }
 
 app.post('/api/mealplan', async (req, res) => {
