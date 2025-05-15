@@ -14,9 +14,10 @@ const CACHE_DIR = './cache';
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 app.use(cors({
-  origin: ['https://thechaostoconfidencecollective.com'],
+  origin: 'https://thechaostoconfidencecollective.com',
   credentials: true
 }));
+
 app.use(bodyParser.json({ limit: '5mb' }));
 
 function weekdaySequence(startDay, duration) {
@@ -71,7 +72,6 @@ ${feedbackText}
 Instructions:
 - Use ${startDay} as the first day and follow correct weekday order
 - Add a note next to the day name if calendar insights are relevant (e.g., Monday – Baseball night)
-- Do NOT use "Day 1", use weekday names only
 - Meals should be simple, realistic, and vary throughout the week
 - Omit detailed ingredients and instructions in this view
 - End with a shopping list that combines all ingredients and subtracts on-hand items.
@@ -99,50 +99,41 @@ Instructions:
   };
 }
 
-async function fetchRecipe(prompt) {
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4',
-    messages: [
-      { role: 'system', content: 'You are a professional recipe writer.' },
-      { role: 'user', content: prompt }
-    ],
-    temperature: 0.7,
-    max_tokens: 1000
-  });
-  return completion.choices?.[0]?.message?.content?.trim() || null;
-}
-
 async function generateRecipes(data, mealPlan) {
   const { people = 4 } = data;
-  const lines = mealPlan.split('\n').filter(line => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(line.trim()));
-  const recipes = [];
+  const lines = mealPlan.split('\n').filter(line => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) (Breakfast|Lunch|Supper):/i.test(line.trim()));
 
+  const recipes = [];
   for (const line of lines) {
-    const match = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):\s*(.*)$/i);
+    const match = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) (Breakfast|Lunch|Supper):\s*(.*)$/i);
     if (!match) continue;
 
     const [_, day, mealType, title] = match;
-    const prompt = `You MUST return the following format:
+    const prompt = `You are a professional recipe writer. Generate a recipe for the following meal in this exact format:
 
-**Meal Name:** ${day} ${mealType}: ${title}
+**Meal Name:** ${day} ${mealType} - ${title}
 **Ingredients:**
-- [ingredient and quantity]
+- [List all ingredients with accurate U.S. measurements for ${people} people]
 **Instructions:**
-1. [step one]
-2. [step two]
-**Prep Time:** 10 minutes
-**Macros:** Protein: Xg, Carbs: Xg, Fat: Xg`;
+1. [Step-by-step instructions to cook the meal.]
+**Prep Time:** X minutes
+**Macros:** X grams protein, X grams fat, X grams carbs`;
 
-    let content = await fetchRecipe(prompt);
-    if (!content) {
-      console.warn(`[RETRY] Recipe failed for ${day} ${mealType}, retrying...`);
-      content = await fetchRecipe(prompt);
-    }
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        { role: 'system', content: 'You are a professional recipe writer.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 1000
+    });
 
+    const content = completion.choices?.[0]?.message?.content?.trim();
     if (content) recipes.push(content);
   }
 
-  return recipes.length > 0 ? recipes.join('\n\n---\n\n') : '**No recipes could be generated based on the current meal plan.**';
+  return recipes.length > 0 ? recipes.join('\n---\n') : '**No recipes could be generated based on the current meal plan.**';
 }
 
 app.post('/api/mealplan', async (req, res) => {
@@ -161,7 +152,7 @@ app.post('/api/mealplan', async (req, res) => {
 
     res.json({ sessionId, ...mealPlanData, recipes });
   } catch (err) {
-    console.error('[API ERROR]', err);
+    console.error('[ERROR]', err);
     res.status(500).json({ error: 'Error generating meal plan.' });
   }
 });
@@ -173,7 +164,8 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
 
   try {
     const cache = JSON.parse(await fs.readFile(filePath, 'utf-8'));
-    let content = '', filename = '';
+    let content = '';
+    let filename = '';
 
     if (type === 'mealplan') {
       content = `Meal Plan for ${cache.name}\n\n${cache.mealPlan}`;
@@ -195,7 +187,7 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
     const url = await uploadPdfToS3(buffer, filename);
     res.json({ url });
   } catch (err) {
-    console.error('PDF generation error:', err);
+    console.error('[PDF ERROR]', err);
     res.status(404).json({ error: 'PDF or session not found.' });
   }
 });
