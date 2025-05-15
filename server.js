@@ -9,11 +9,25 @@ import fs from 'fs/promises';
 import path from 'path';
 
 const app = express();
+console.log('[DEBUG] Express app created');
 const PORT = process.env.PORT || 3000;
-const CACHE_DIR = './cache';
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const CACHE_DIR = './cache';
 
-app.use(cors({ origin: '*', credentials: true }));
+const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
+console.log('[DEBUG] Configuring CORS');
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS not allowed from this origin'));
+    }
+  },
+  credentials: true
+}));
+
+console.log('[DEBUG] Applying body-parser middleware');
 app.use(bodyParser.json({ limit: '5mb' }));
 
 function weekdaySequence(startDay, duration) {
@@ -24,7 +38,7 @@ function weekdaySequence(startDay, duration) {
 
 function extractRelevantInsights(calendarInsights, startDay, duration) {
   const days = weekdaySequence(startDay, duration);
-  const insights = calendarInsights.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+  const insights = calendarInsights.split(/[,]/).map(s => s.trim()).filter(Boolean);
   return insights.filter(line => days.some(day => line.toLowerCase().includes(day.toLowerCase()))).join(', ');
 }
 
@@ -76,6 +90,8 @@ Instructions:
 - Group shopping list items by category (Produce, Meat, Dairy, etc.)
 - Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities`;
 
+  console.log('[MEALPLAN REQUEST]', data);
+
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
     messages: [
@@ -89,6 +105,7 @@ Instructions:
   const result = completion.choices?.[0]?.message?.content || '';
   const [mealPlanPart, shoppingListPart] = result.split(/(?=Shopping List)/i);
 
+  console.log('[MEAL PLAN OK]');
   return {
     mealPlan: stripFormatting(mealPlanPart?.trim() || ''),
     shoppingList: stripFormatting(shoppingListPart?.trim() || 'Shopping list coming soon...')
@@ -96,12 +113,8 @@ Instructions:
 }
 
 async function generateRecipes(data, mealPlan) {
-  console.log('[RECIPE GEN] Starting individual recipe generation...');
   const { people = 4 } = data;
-  const lines = mealPlan.split('\n').filter(l =>
-    /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(l.trim())
-  );
-
+  const lines = mealPlan.split('\n').filter(l => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(l.trim()));
   const recipes = [];
 
   for (const line of lines) {
@@ -109,8 +122,7 @@ async function generateRecipes(data, mealPlan) {
     if (!match) continue;
 
     const [_, day, mealType, title] = match;
-
-    const prompt = `You are a recipe writer. Write a full recipe for the following meal:
+    const prompt = `You are a recipe writer. Write a full recipe for the following meal.
 
 Meal Title: ${title}
 Day: ${day}
@@ -135,19 +147,14 @@ Include:
       max_tokens: 1000
     });
 
-    const result = completion.choices?.[0]?.message?.content?.trim();
+    const result = completion.choices?.[0]?.message?.content;
     if (result) {
-      recipes.push(`**${day} ${mealType}: ${title}**\n${result}`);
-    } else {
-      console.warn(`[RECIPE GEN] GPT returned empty for ${day} ${mealType}`);
+      recipes.push(`**${day} ${mealType}: ${title}**\n${stripFormatting(result.trim())}`);
     }
   }
 
-  const finalOutput = recipes.length ? recipes.join('\n\n---\n\n') : '**No recipes could be generated based on the current meal plan.**';
-  console.log('[RECIPE GEN] Final recipe length:', finalOutput.length);
-  return finalOutput;
+  return recipes.length > 0 ? recipes.join('\n\n---\n\n') : '**No recipes could be generated based on the current meal plan.**';
 }
-
 
 app.post('/api/mealplan', async (req, res) => {
   try {
@@ -163,9 +170,10 @@ app.post('/api/mealplan', async (req, res) => {
       recipes
     }, null, 2));
 
+    console.log('[RESPONSE OK]', { sessionId });
     res.json({ sessionId, ...mealPlanData, recipes });
   } catch (err) {
-    console.error('[API ERROR]', err);
+    console.error('[API ERROR]', err.message);
     res.status(500).json({ error: 'Error generating meal plan.' });
   }
 });
