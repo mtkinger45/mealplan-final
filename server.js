@@ -177,7 +177,7 @@ app.post('/api/mealplan', async (req, res) => {
   }
 });
 
-app.get('/api/pdf/:sessionId', async (req, res) => {
+app.get('/api/pdf/:sessionId', cors(), async (req, res) => {
   const { sessionId } = req.params;
   const { type } = req.query;
   const filePath = path.join(CACHE_DIR, `${sessionId}.json`);
