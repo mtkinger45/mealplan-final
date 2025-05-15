@@ -116,12 +116,12 @@ Instructions:
 
 async function generateRecipes(data, mealPlan) {
   const { people = 4 } = data;
-  const lines = mealPlan.split('\n').filter(l => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(l.trim()));
+  const lines = mealPlan.split('\n').filter(l => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)[\s–-]+(Breakfast|Lunch|Supper):/i.test(l.trim()));
   const recipes = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const match = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):\s*(.*)$/i);
+    const match = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)[\s–-]+(Breakfast|Lunch|Supper):\s*(.*)$/i);
     if (!match) continue;
 
     const [_, day, mealType, title] = match;
@@ -131,10 +131,9 @@ async function generateRecipes(data, mealPlan) {
 **Ingredients:** List each ingredient with exact U.S. quantities.
 **Instructions:** List steps clearly, numbered.
 **Prep & Cook Time:** Estimated time.
-**Macros per Serving:** Include protein, carbs, fat.
+**Macros per Serving:** Include protein, carbs, fat.`;
 
-Focus on whole foods, simplicity, and accurate measures.`;
-
+    console.log(`[GPT REQUEST] ${day} ${mealType}: ${title}`);
     const completion = await openai.chat.completions.create({
       model: 'gpt-4',
       messages: [
@@ -146,7 +145,11 @@ Focus on whole foods, simplicity, and accurate measures.`;
     });
 
     const recipe = completion.choices?.[0]?.message?.content?.trim();
-    if (recipe) recipes.push(recipe);
+    if (recipe) {
+      recipes.push(recipe);
+    } else {
+      recipes.push(`**Meal ${i + 1} Name:** ${title}\n⚠️ Failed to generate.`);
+    }
   }
 
   if (recipes.length === 0) {
