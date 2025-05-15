@@ -77,7 +77,6 @@ ${feedbackText}
 
 Instructions:
 - Use ${startDay} as the first day and follow correct weekday order
-- Only include the selected meals: ${meals.join(', ')}
 - Add a note next to the day name if calendar insights are relevant (e.g., Monday – Baseball night)
 - Do NOT use "Day 1", use weekday names only
 - Meals should be simple, realistic, and vary throughout the week
@@ -86,7 +85,7 @@ Instructions:
 - Calculate total ingredient quantities based on household size
 - Use U.S. measurements (e.g., cups, oz, lbs)
 - Group shopping list items by category (Produce, Meat, Dairy, etc.)
-- Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities.`;
+- Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -95,7 +94,7 @@ Instructions:
       { role: 'user', content: prompt }
     ],
     temperature: 0.7,
-    max_tokens: 4000
+    max_tokens: 3500
   });
 
   const result = completion.choices?.[0]?.message?.content || '';
@@ -112,24 +111,19 @@ async function generateRecipes(data, mealPlan) {
   const lines = mealPlan.split('\n').filter(l => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(l.trim()));
   const recipes = [];
 
-  let mealNumber = 1;
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const match = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):\s*(.*)$/i);
     if (!match) continue;
 
     const [_, day, mealType, title] = match;
-    const prompt = `You are a recipe writer. Write a full recipe for the following meal.
-Meal Title: ${title}
-Day: ${day}
-Meal Type: ${mealType}
-Servings: ${people}
+    const prompt = `You are a recipe writer. Create a full recipe for the following meal:
 
-Return in this format:
-**Meal ${mealNumber} Name:** ${title}
-**Ingredients:** eggs (4), bacon (6 slices), ghee (1 tbsp)
-**Instructions:** Heat skillet. Cook bacon. Scramble eggs with ghee.
-**Prep & Cook Time:** 5 min prep, 10 min cook
-**Macros per Serving:** Protein: 30g, Fat: 25g, Carbs: 5g`;
+**Meal ${i + 1} Name:** ${title}
+**Ingredients:** (list ingredients with U.S. quantities, scaled for ${people} people)
+**Instructions:** (step-by-step cooking instructions)
+**Prep & Cook Time:** (e.g., 10 min prep, 20 min cook)
+**Macros per Serving:** (protein, carbs, fat)`;
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4',
@@ -145,10 +139,9 @@ Return in this format:
     if (result) {
       recipes.push(result);
     }
-    mealNumber++;
   }
 
-  return recipes.join('\n\n');
+  return recipes.length > 0 ? recipes.join('\n\n') : '**No recipes could be generated based on the current meal plan.**';
 }
 
 app.post('/api/mealplan', async (req, res) => {
@@ -165,14 +158,9 @@ app.post('/api/mealplan', async (req, res) => {
       recipes
     }, null, 2));
 
-    res.json({
-      sessionId,
-      mealPlan: mealPlanData.mealPlan,
-      shoppingList: mealPlanData.shoppingList,
-      recipes
-    });
+    res.json({ sessionId, ...mealPlanData, recipes });
   } catch (err) {
-    console.error('[API ERROR]', err.message);
+    console.error('[API ERROR]', err);
     res.status(500).json({ error: 'Error generating meal plan.' });
   }
 });
