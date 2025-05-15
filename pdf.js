@@ -41,35 +41,39 @@ export async function createPdfFromText(text, options = {}) {
   }
 
   else if (options.type === 'recipes') {
-    const recipes = text.split(/\n---\n/);
-    recipes.forEach(recipe => {
-      const lines = recipe.trim().split('\n');
-      doc.addPage();
-      lines.forEach(line => {
-        safePageBreak();
-        if (/^\*\*Meal Name:\*\*/i.test(line)) {
-          doc.font('Helvetica-Bold').fontSize(14).text(line.replace(/^\*\*(.*?)\*\*$/, '$1'));
-        } else if (/^\*\*Ingredients:\*\*/i.test(line)) {
-          doc.moveDown(0.5);
-          doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
-        } else if (/^\*\*Instructions:\*\*/i.test(line)) {
-          doc.moveDown(0.5);
-          doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
-        } else if (/^\*\*Prep Time:\*\*/i.test(line)) {
-          doc.moveDown(0.5);
-          doc.font('Helvetica').fontSize(12).text(line.replace(/^\*\*(.*?)\*\*$/, '$1'));
-        } else if (/^\*\*Macros:\*\*/i.test(line)) {
-          doc.moveDown(0.5);
-          doc.font('Helvetica').fontSize(12).text(line.replace(/^\*\*(.*?)\*\*$/, '$1'));
-        } else if (/^- /.test(line)) {
-          doc.font('Helvetica').fontSize(12).text(`• ${line.substring(2)}`);
-        } else if (/^\d+\. /.test(line)) {
-          doc.font('Helvetica').fontSize(12).text(line);
-        } else {
-          doc.font('Helvetica').fontSize(12).text(line);
-        }
+    if (!text || text.trim().length === 0 || /\*\*No recipes could be generated/i.test(text)) {
+      doc.font('Helvetica-Bold').fontSize(14).text('**No recipes could be generated based on the current meal plan.**');
+    } else {
+      const recipes = text.split(/\n---\n/);
+      recipes.forEach((recipe, index) => {
+        const lines = recipe.trim().split('\n');
+        if (index > 0) doc.addPage();
+        lines.forEach(line => {
+          safePageBreak();
+          if (/^\*\*Meal Name:\*\*/i.test(line)) {
+            doc.font('Helvetica-Bold').fontSize(14).text(line.replace(/\*\*(.*?)\*\*/, '$1'));
+          } else if (/^\*\*Ingredients:\*\*/i.test(line)) {
+            doc.moveDown(0.5);
+            doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
+          } else if (/^\*\*Instructions:\*\*/i.test(line)) {
+            doc.moveDown(0.5);
+            doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
+          } else if (/^\*\*Prep Time:\*\*/i.test(line)) {
+            doc.moveDown(0.5);
+            doc.font('Helvetica').fontSize(12).text(line.replace(/\*\*(.*?)\*\*/, '$1'));
+          } else if (/^\*\*Macros:\*\*/i.test(line)) {
+            doc.moveDown(0.5);
+            doc.font('Helvetica').fontSize(12).text(line.replace(/\*\*(.*?)\*\*/, '$1'));
+          } else if (/^- /.test(line)) {
+            doc.font('Helvetica').fontSize(12).text(`• ${line.substring(2)}`);
+          } else if (/^\d+\. /.test(line)) {
+            doc.font('Helvetica').fontSize(12).text(line);
+          } else {
+            doc.font('Helvetica').fontSize(12).text(line);
+          }
+        });
       });
-    });
+    }
   }
 
   else {
