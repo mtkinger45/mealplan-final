@@ -78,7 +78,13 @@ Instructions:
 - Calculate total ingredient quantities based on household size
 - Use U.S. measurements (e.g., cups, oz, lbs)
 - Group shopping list items by category (Produce, Meat, Dairy, etc.)
-- Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities`;
+- Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities
+- At the end, provide a JSON list of the meals in this format:
+[
+  {"day": "Monday", "meal": "Breakfast", "title": "Scrambled Eggs & Bacon"},
+  {"day": "Monday", "meal": "Lunch", "title": "Chicken Salad"},
+  ...
+]`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -92,26 +98,24 @@ Instructions:
 
   const result = completion.choices?.[0]?.message?.content || '';
   const [mealPlanPart, shoppingListPart] = result.split(/(?=Shopping List)/i);
+  const jsonBlockMatch = result.match(/\[\s*{[\s\S]*?}\s*\]/);
+  const mealList = jsonBlockMatch ? JSON.parse(jsonBlockMatch[0]) : [];
 
   return {
     mealPlan: stripFormatting(mealPlanPart?.trim() || ''),
-    shoppingList: stripFormatting(shoppingListPart?.trim() || 'Shopping list coming soon...')
+    shoppingList: stripFormatting(shoppingListPart?.trim() || 'Shopping list coming soon...'),
+    mealList
   };
 }
 
-async function generateRecipes(data, mealPlan) {
+async function generateRecipes(data, mealList) {
   const { people = 4 } = data;
-  const lines = mealPlan.split('\n').filter(line => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) (Breakfast|Lunch|Supper):/i.test(line.trim()));
-
   const recipes = [];
-  for (const line of lines) {
-    const match = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) (Breakfast|Lunch|Supper):\s*(.*)$/i);
-    if (!match) continue;
 
-    const [_, day, mealType, title] = match;
+  for (const { day, meal, title } of mealList) {
     const prompt = `You are a professional recipe writer. Generate a recipe for the following meal in this exact format:
 
-**Meal Name:** ${day} ${mealType} - ${title}
+**Meal Name:** ${day} ${meal} - ${title}
 **Ingredients:**
 - [List all ingredients with accurate U.S. measurements for ${people} people]
 **Instructions:**
@@ -141,7 +145,7 @@ app.post('/api/mealplan', async (req, res) => {
     const data = req.body;
     const sessionId = randomUUID();
     const mealPlanData = await generateMealPlanData(data);
-    const recipes = await generateRecipes(data, mealPlanData.mealPlan);
+    const recipes = await generateRecipes(data, mealPlanData.mealList);
 
     await fs.mkdir(CACHE_DIR, { recursive: true });
     await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify({
