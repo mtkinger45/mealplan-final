@@ -200,4 +200,3 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
