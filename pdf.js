@@ -27,12 +27,67 @@ export async function createPdfFromText(text, options = {}) {
     }
   };
 
-  if (options.type === 'shoppingList') {
+  if (options.type === 'recipes') {
+    if (!text || text.trim().length === 0 || /no recipes/i.test(text)) {
+      doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
+      doc.end();
+      return new Promise(resolve => doc.on('end', () => resolve(Buffer.concat(buffers))));
+    }
+
+    const sections = text.split(/\*\*Meal \d+ Name:\*\*/).filter(Boolean);
+
+    sections.forEach((block, idx) => {
+      doc.addPage();
+      const lines = block.trim().split('\n');
+
+      // Print meal title
+      doc.font('Helvetica-Bold').fontSize(14).text(`Meal ${idx + 1}`);
+      doc.moveDown(0.5);
+
+      lines.forEach((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+
+        safePageBreak();
+
+        if (/^\*\*Ingredients:\*\*/.test(trimmed)) {
+          doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
+        } else if (/^\*\*Instructions:\*\*/.test(trimmed)) {
+          doc.moveDown(0.5);
+          doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
+        } else if (/^\*\*Prep & Cook Time:\*\*/.test(trimmed)) {
+          doc.moveDown(0.5);
+          doc.font('Helvetica-Bold').fontSize(12).text('Prep & Cook Time:');
+          doc.font('Helvetica').fontSize(12).text(trimmed.replace(/^\*\*Prep & Cook Time:\*\*/, '').trim());
+        } else if (/^\*\*Macros:\*\*/.test(trimmed)) {
+          doc.moveDown(0.5);
+          doc.font('Helvetica-Bold').fontSize(12).text('Macros:');
+          doc.font('Helvetica').fontSize(12).text(trimmed.replace(/^\*\*Macros:\*\*/, '').trim());
+        } else if (/^\d+\./.test(trimmed)) {
+          doc.font('Helvetica').fontSize(12).text(trimmed); // Instruction step
+        } else {
+          doc.font('Helvetica').fontSize(12).text(`• ${trimmed}`); // ingredient or misc
+        }
+      });
+    });
+  }
+
+  else if (options.type === 'shoppingList') {
     const sections = text.split(/(?=^[A-Za-z ]+:)/m);
+    const onHandSection = [];
+    const otherSections = [];
+
     sections.forEach(section => {
+      if (section.includes('• On-hand Ingredients Used:')) {
+        onHandSection.push(section);
+      } else {
+        otherSections.push(section);
+      }
+    });
+
+    [...otherSections, ...onHandSection].forEach(section => {
       const lines = section.trim().split('\n');
-      const headingLine = lines[0].trim();
-      const heading = headingLine.replace(/:$/, '');
+      const heading = lines[0].trim().replace(/:$/, '');
 
       safePageBreak();
       doc.moveDown(1);
@@ -40,66 +95,22 @@ export async function createPdfFromText(text, options = {}) {
       doc.moveDown(0.3);
 
       lines.slice(1).forEach(item => {
-        const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
+        safePageBreak();
+        const cleanedItem = item.trim()
+          .replace(/^[-–•]\s*/, '')
+          .replace(/^([\d.]+)\s+(\w+)\s+(.*)/, '$1 $3 $2')
+          .replace(/^([a-zA-Z]+):\s*(\d+)$/, '$2 $1');
+
         if (cleanedItem) {
-          safePageBreak();
           doc.font('Helvetica').fontSize(12).text(`• ${cleanedItem}`);
         }
       });
 
       doc.moveDown(1.5);
     });
-  } else if (options.type === 'recipes') {
-    const lines = text.split('\n');
-    let inIngredients = false;
-    let inInstructions = false;
+  }
 
-    lines.forEach((line, idx) => {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        doc.moveDown(1);
-        return;
-      }
-
-      safePageBreak();
-
-      if (/\*\*Meal \d+ Name:\*\*/.test(trimmed)) {
-        doc.addPage();
-        doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
-        doc.moveDown(0.5);
-        inIngredients = false;
-        inInstructions = false;
-      } else if (/\*\*Ingredients:\*\*/.test(trimmed)) {
-        inIngredients = true;
-        inInstructions = false;
-        doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
-        doc.moveDown(0.3);
-      } else if (/\*\*Instructions:\*\*/.test(trimmed)) {
-        inIngredients = false;
-        inInstructions = true;
-        doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
-        doc.moveDown(0.3);
-      } else if (/\*\*Prep & Cook Time:\*\*/.test(trimmed)) {
-        inIngredients = false;
-        inInstructions = false;
-        doc.font('Helvetica-Bold').fontSize(12).text(trimmed.replace(/\*\*/g, ''));
-        doc.moveDown(0.3);
-      } else if (/\*\*Macros:\*\*/.test(trimmed)) {
-        inIngredients = false;
-        inInstructions = false;
-        doc.font('Helvetica-Bold').fontSize(12).text(trimmed.replace(/\*\*/g, ''));
-        doc.addPage();
-      } else {
-        if (inIngredients) {
-          doc.font('Helvetica').fontSize(12).text(`• ${trimmed}`);
-        } else if (inInstructions && /^\d+\.\s+/.test(trimmed)) {
-          doc.font('Helvetica').fontSize(12).text(trimmed);
-        } else {
-          doc.font('Helvetica').fontSize(12).text(trimmed);
-        }
-      }
-    });
-  } else {
+  else {
     const lines = text.split('\n');
     lines.forEach((line, idx) => {
       const trimmed = line.trim();
@@ -107,6 +118,13 @@ export async function createPdfFromText(text, options = {}) {
 
       if (/^Meal Plan for /i.test(trimmed)) {
         doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
+      } else if (/^(Day \d+:\s+\w+day.*?)$/i.test(trimmed)) {
+        doc.moveDown(0.5);
+        doc.font('Helvetica-Bold').fontSize(12).text(trimmed);
+      } else if (/^(Breakfast|Lunch|Supper|Snack):/i.test(trimmed)) {
+        const label = trimmed.split(':')[0];
+        const name = trimmed.split(':').slice(1).join(':');
+        doc.font('Helvetica').fontSize(12).text(`${label}: ${name}`);
       } else {
         doc.font('Helvetica').fontSize(12).text(trimmed);
       }
@@ -117,7 +135,7 @@ export async function createPdfFromText(text, options = {}) {
 
   doc.end();
 
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     doc.on('end', () => {
       const pdfBuffer = Buffer.concat(buffers);
       resolve(pdfBuffer);
