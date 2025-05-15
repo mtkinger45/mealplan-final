@@ -49,10 +49,12 @@ export async function createPdfFromText(text, options = {}) {
       doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
     } else {
       const recipes = text.split(/---/);
+      let first = true;
       for (const rec of recipes) {
         const lines = rec.trim().split('\n');
         if (!lines.length) continue;
-        doc.addPage();
+        if (!first) doc.addPage();
+        first = false;
         for (const line of lines) {
           safePageBreak();
           const trimmed = line.trim();
@@ -82,11 +84,16 @@ export async function createPdfFromText(text, options = {}) {
     }
   } else {
     const lines = text.split('\n');
+    let currentDay = '';
     for (const line of lines) {
       safePageBreak();
       const trimmed = line.trim();
       if (/^Meal Plan for /i.test(trimmed)) {
         doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
+      } else if (/^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)/.test(trimmed)) {
+        if (currentDay !== '') doc.moveDown(1);
+        currentDay = trimmed;
+        doc.font('Helvetica-Bold').fontSize(12).text(trimmed);
       } else {
         doc.font('Helvetica').fontSize(12).text(trimmed);
       }
