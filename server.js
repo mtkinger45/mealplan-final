@@ -107,8 +107,12 @@ Instructions:
 }
 
 async function generateRecipes(data, mealPlan) {
-  const { people = 4 } = data;
-  const lines = mealPlan.split('\n').filter(l => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(l.trim()));
+  const { people = 4, meals = ['Supper'] } = data;
+  const lines = mealPlan.split('\n').filter(l => {
+    const match = l.trim().match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i);
+    return match && meals.includes(match[2]);
+  });
+
   const recipes = [];
 
   for (let i = 0; i < lines.length; i++) {
