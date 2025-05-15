@@ -69,29 +69,35 @@ export async function createPdfFromText(text, options = {}) {
     if (!text || text.trim().length === 0 || /no recipes/i.test(text)) {
       doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
     } else {
-      const lines = text.split('\n');
-      lines.forEach((line, idx) => {
-        const trimmed = line.trim();
-        safePageBreak(doc);
+      const recipes = text.split(/\n(?=\*\*.*\*\*\n)/);
 
-        if (/^\*\*.*\*\*$/.test(trimmed)) {
-          doc.addPage();
-          doc.font('Helvetica-Bold').fontSize(14).text(trimmed.replace(/^\*\*|\*\*$/g, ''));
-        } else if (/^Ingredients:/i.test(trimmed)) {
-          doc.moveDown(0.3);
-          doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
-        } else if (/^Instructions:/i.test(trimmed)) {
-          doc.moveDown(0.3);
-          doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
-        } else if (/^Prep.*Time:/i.test(trimmed)) {
-          doc.moveDown(0.3);
-          doc.font('Helvetica').fontSize(12).text(trimmed);
-        } else if (/^Macros:/i.test(trimmed)) {
-          doc.font('Helvetica').fontSize(12).text(trimmed);
-          doc.addPage();
-        } else {
-          doc.font('Helvetica').fontSize(12).text(trimmed);
-        }
+      recipes.forEach((block, idx) => {
+        const lines = block.trim().split('\n');
+        if (lines.length === 0) return;
+
+        if (idx > 0) doc.addPage();
+
+        lines.forEach((line, i) => {
+          const trimmed = line.trim();
+          safePageBreak(doc);
+
+          if (/^\*\*.*\*\*$/.test(trimmed)) {
+            doc.font('Helvetica-Bold').fontSize(14).text(trimmed.replace(/^\*\*|\*\*$/g, ''));
+          } else if (/^Ingredients:/i.test(trimmed)) {
+            doc.moveDown(0.3);
+            doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
+          } else if (/^Instructions:/i.test(trimmed)) {
+            doc.moveDown(0.3);
+            doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
+          } else if (/^Prep.*Time:/i.test(trimmed)) {
+            doc.moveDown(0.3);
+            doc.font('Helvetica').fontSize(12).text(trimmed);
+          } else if (/^Macros:/i.test(trimmed)) {
+            doc.font('Helvetica').fontSize(12).text(trimmed);
+          } else {
+            doc.font('Helvetica').fontSize(12).text(trimmed);
+          }
+        });
       });
     }
   } else {
