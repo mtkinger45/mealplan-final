@@ -64,9 +64,7 @@ export async function createPdfFromText(text, options = {}) {
 
       doc.moveDown(1.5);
     });
-  }
-
-  else if (options.type === 'recipes') {
+  } else if (options.type === 'recipes') {
     const lines = text.split('\n');
     if (lines.length === 0 || lines.every(line => !line.trim())) {
       doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
@@ -82,28 +80,28 @@ export async function createPdfFromText(text, options = {}) {
 
         if (/^\*\*Meal Name:\*\*/i.test(trimmed)) {
           doc.addPage();
-          doc.font('Helvetica-Bold').fontSize(13).text(trimmed.replace(/^\*\*Meal Name:\*\*/i, 'Meal Name:'));
+          doc.font('Helvetica-Bold').fontSize(14).text(trimmed.replace(/^\*\*Meal Name:\*\*/i, 'Meal Name:'));
         } else if (/^\*\*Ingredients:\*\*/i.test(trimmed)) {
           doc.moveDown(0.5);
           doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
-        } else if (/^-\s+/.test(trimmed)) {
-          doc.font('Helvetica').fontSize(12).text(trimmed);
         } else if (/^\*\*Instructions:\*\*/i.test(trimmed)) {
           doc.moveDown(0.5);
           doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
-        } else if (/^\d+\.\s+/.test(trimmed)) {
-          doc.font('Helvetica').fontSize(12).text(trimmed);
-        } else if (/^\*\*Prep.*Time:\*\*/i.test(trimmed) || /^\*\*Macros:\*\*/i.test(trimmed)) {
+        } else if (/^\*\*Prep Time:\*\*/i.test(trimmed)) {
           doc.moveDown(0.3);
           doc.font('Helvetica').fontSize(12).text(trimmed.replace(/\*\*/g, ''));
+        } else if (/^\*\*Macros:\*\*/i.test(trimmed)) {
+          doc.font('Helvetica').fontSize(12).text(trimmed.replace(/\*\*/g, ''));
+        } else if (/^[-•]\s+/.test(trimmed)) {
+          doc.font('Helvetica').fontSize(12).text(trimmed);
+        } else if (/^\d+\.\s+/.test(trimmed)) {
+          doc.font('Helvetica').fontSize(12).text(trimmed);
         } else {
           doc.font('Helvetica').fontSize(12).text(trimmed);
         }
       });
     }
-  }
-
-  else {
+  } else {
     const lines = text.split('\n');
     lines.forEach((line, idx) => {
       const trimmed = line.trim();
