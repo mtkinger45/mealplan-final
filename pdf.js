@@ -16,124 +16,79 @@ export async function createPdfFromText(text, options = {}) {
   const buffers = [];
 
   doc.on('data', buffers.push.bind(buffers));
-  doc.on('end', () => {
-    console.log('[createPdfFromText] PDF generation complete.');
-  });
 
-  const safePageBreak = (threshold = 100) => {
-    if (doc.y > doc.page.height - doc.page.margins.bottom - threshold) {
+  const safePageBreak = () => {
+    if (doc.y > doc.page.height - doc.page.margins.bottom - 100) {
       doc.addPage();
     }
   };
 
   if (options.type === 'shoppingList') {
     const sections = text.split(/(?=^[A-Za-z ]+:)/m);
-    const onHandSection = [];
-    const otherSections = [];
-
     sections.forEach(section => {
-      if (section.includes('• On-hand Ingredients Used:')) {
-        onHandSection.push(section);
-      } else {
-        otherSections.push(section);
-      }
-    });
-
-    [...otherSections, ...onHandSection].forEach(section => {
       const lines = section.trim().split('\n');
-      const headingLine = lines[0].trim();
-      const heading = headingLine.replace(/:$/, '');
-
-      safePageBreak();
+      const heading = lines[0];
+      const items = lines.slice(1);
       doc.moveDown(1);
       doc.font('Helvetica-Bold').fontSize(13).text(heading);
       doc.moveDown(0.3);
-
-      lines.slice(1).forEach(item => {
+      items.forEach(item => {
         safePageBreak();
-        const cleanedItem = item.trim()
-          .replace(/^[-–•]\s*/, '')
-          .replace(/^([\d.]+)\s+(\w+)\s+(.*)/, '$1 $3 $2')
-          .replace(/^([a-zA-Z]+):\s*(\d+)$/, '$2 $1');
-
-        if (cleanedItem) {
-          safePageBreak();
-          doc.font('Helvetica').fontSize(12).text(`• ${cleanedItem}`);
-        }
+        doc.font('Helvetica').fontSize(12).text(`• ${item.trim()}`);
       });
-
       doc.moveDown(1.5);
     });
-  } else if (options.type === 'recipes') {
-    const lines = text.split('\n');
-    if (lines.length === 0 || lines.every(line => !line.trim())) {
-      doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
-    } else {
-      lines.forEach((line, idx) => {
-        const trimmed = line.trim();
-        if (!trimmed) {
-          doc.moveDown(1);
-          return;
-        }
+  }
 
+  else if (options.type === 'recipes') {
+    const recipes = text.split(/\n---\n/);
+    recipes.forEach(recipe => {
+      const lines = recipe.trim().split('\n');
+      doc.addPage();
+      lines.forEach(line => {
         safePageBreak();
-
-        if (/^\*\*Meal Name:\*\*/i.test(trimmed)) {
-          doc.addPage();
-          doc.font('Helvetica-Bold').fontSize(14).text(trimmed.replace(/^\*\*Meal Name:\*\*/i, 'Meal Name:'));
-        } else if (/^\*\*Ingredients:\*\*/i.test(trimmed)) {
+        if (/^\*\*Meal Name:\*\*/i.test(line)) {
+          doc.font('Helvetica-Bold').fontSize(14).text(line.replace(/^\*\*(.*?)\*\*$/, '$1'));
+        } else if (/^\*\*Ingredients:\*\*/i.test(line)) {
           doc.moveDown(0.5);
           doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
-        } else if (/^\*\*Instructions:\*\*/i.test(trimmed)) {
+        } else if (/^\*\*Instructions:\*\*/i.test(line)) {
           doc.moveDown(0.5);
           doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
-        } else if (/^\*\*Prep Time:\*\*/i.test(trimmed)) {
-          doc.moveDown(0.3);
-          doc.font('Helvetica').fontSize(12).text(trimmed.replace(/\*\*/g, ''));
-        } else if (/^\*\*Macros:\*\*/i.test(trimmed)) {
-          doc.font('Helvetica').fontSize(12).text(trimmed.replace(/\*\*/g, ''));
-        } else if (/^[-•]\s+/.test(trimmed)) {
-          doc.font('Helvetica').fontSize(12).text(trimmed);
-        } else if (/^\d+\.\s+/.test(trimmed)) {
-          doc.font('Helvetica').fontSize(12).text(trimmed);
+        } else if (/^\*\*Prep Time:\*\*/i.test(line)) {
+          doc.moveDown(0.5);
+          doc.font('Helvetica').fontSize(12).text(line.replace(/^\*\*(.*?)\*\*$/, '$1'));
+        } else if (/^\*\*Macros:\*\*/i.test(line)) {
+          doc.moveDown(0.5);
+          doc.font('Helvetica').fontSize(12).text(line.replace(/^\*\*(.*?)\*\*$/, '$1'));
+        } else if (/^- /.test(line)) {
+          doc.font('Helvetica').fontSize(12).text(`• ${line.substring(2)}`);
+        } else if (/^\d+\. /.test(line)) {
+          doc.font('Helvetica').fontSize(12).text(line);
         } else {
-          doc.font('Helvetica').fontSize(12).text(trimmed);
+          doc.font('Helvetica').fontSize(12).text(line);
         }
       });
-    }
-  } else {
+    });
+  }
+
+  else {
     const lines = text.split('\n');
     lines.forEach((line, idx) => {
       const trimmed = line.trim();
       safePageBreak();
-
       if (/^Meal Plan for /i.test(trimmed)) {
         doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
-      } else if (/^(Day \d+:\s+\w+day.*?)$/i.test(trimmed)) {
-        doc.moveDown(0.5);
-        doc.font('Helvetica-Bold').fontSize(12).text(trimmed);
-      } else if (/^(Day \d+:\s+.*?)$/i.test(trimmed)) {
-        doc.moveDown(0.5);
-        doc.font('Helvetica-Bold').fontSize(12).text(trimmed);
-      } else if (/^(Breakfast|Lunch|Supper|Snack):/i.test(trimmed)) {
-        const label = trimmed.split(':')[0];
-        const name = trimmed.split(':').slice(1).join(':');
-        doc.font('Helvetica').fontSize(12).text(`${label}: ${name}`);
       } else {
         doc.font('Helvetica').fontSize(12).text(trimmed);
       }
-
       if (idx < lines.length - 1) doc.moveDown(0.5);
     });
   }
 
   doc.end();
-
-  return new Promise((resolve) => {
-    doc.on('end', () => {
-      const pdfBuffer = Buffer.concat(buffers);
-      resolve(pdfBuffer);
-    });
+  return new Promise(resolve => {
+    doc.on('end', () => resolve(Buffer.concat(buffers)));
   });
 }
 
@@ -145,14 +100,8 @@ export async function uploadPdfToS3(buffer, filename) {
     Body: buffer,
     ContentType: 'application/pdf'
   });
-
   await s3.send(uploadCommand);
-
-  const getCommand = new GetObjectCommand({
-    Bucket: bucketName,
-    Key: filename
-  });
-
+  const getCommand = new GetObjectCommand({ Bucket: bucketName, Key: filename });
   const url = await getSignedUrl(s3, getCommand, { expiresIn: 3600 });
   return url;
 }
