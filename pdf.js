@@ -51,7 +51,11 @@ export async function createPdfFromText(text, options = {}) {
       doc.moveDown(0.3);
 
       lines.slice(1).forEach(item => {
-        const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
+        const cleanedItem = item.trim()
+          .replace(/^[-–•]\s*/, '')
+          .replace(/^([\d.]+)\s+(\w+)\s+(.*)/, '$1 $3 $2')
+          .replace(/^([a-zA-Z]+):\s*(\d+)$/, '$2 $1');
+
         if (cleanedItem) {
           safePageBreak(doc);
           doc.font('Helvetica').fontSize(12).text(`• ${cleanedItem}`);
@@ -60,11 +64,8 @@ export async function createPdfFromText(text, options = {}) {
 
       doc.moveDown(1.5);
     });
-  }
-
-  else if (options.type === 'recipes') {
-    console.log('[PDF DEBUG] Generating recipe PDF...');
-    if (!text || text.trim().length === 0 || /No recipes found/i.test(text)) {
+  } else if (options.type === 'recipes') {
+    if (!text || text.trim().length === 0) {
       doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
       doc.end();
       return new Promise((resolve) => {
@@ -72,39 +73,41 @@ export async function createPdfFromText(text, options = {}) {
       });
     }
 
-    const blocks = text.split(/(?=\*\*Meal \d+ Name:\*\*)/g);
-    blocks.forEach((block, index) => {
-      if (index > 0) doc.addPage();
-      const lines = block.trim().split('\n');
+    const sections = text.split(/(?=\*\*Meal \d+ Name:\*\*)/);
+    sections.forEach(section => {
+      const lines = section.trim().split('\n').filter(Boolean);
+      if (lines.length === 0) return;
+
+      doc.addPage();
 
       lines.forEach(line => {
-        safePageBreak(doc);
         const trimmed = line.trim();
+        safePageBreak(doc);
 
         if (/^\*\*Meal \d+ Name:\*\*/.test(trimmed)) {
-          doc.font('Helvetica-Bold').fontSize(14).text(trimmed.replace(/\*\*/g, ''));
-        } else if (/^\*\*(Ingredients|Instructions|Prep & Cook Time|Macros per Serving):\*\*/.test(trimmed)) {
-          const label = trimmed.match(/\*\*(.*?):\*\*/)?.[1];
-          const value = trimmed.replace(/\*\*.*?:\*\*/g, '').trim();
+          doc.font('Helvetica-Bold').fontSize(14).text(trimmed.replace(/^\*\*(.*?)\*\*$/, '$1'));
           doc.moveDown(0.5);
-          doc.font('Helvetica-Bold').fontSize(12).text(`${label}:`);
-          doc.font('Helvetica').fontSize(12);
-
-          if (label === 'Ingredients') {
-            value.split(/,|\n/).map(i => i.trim()).forEach(i => doc.text(`• ${i}`));
-          } else if (label === 'Instructions') {
-            value.split(/(?<=\.)\s+(?=\w)/).map(i => i.trim()).forEach((step, idx) => {
-              doc.text(`${idx + 1}. ${step}`);
-            });
-          } else {
-            doc.text(value);
-          }
+        } else if (/^\*\*Ingredients:\*\*/.test(trimmed)) {
+          const ingredients = trimmed.replace(/^\*\*Ingredients:\*\*\s*/, '').split(',').map(i => i.trim());
+          doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
+          ingredients.forEach(ing => doc.font('Helvetica').fontSize(12).text(`• ${ing}`));
+          doc.moveDown(0.5);
+        } else if (/^\*\*Instructions:\*\*/.test(trimmed)) {
+          const steps = trimmed.replace(/^\*\*Instructions:\*\*\s*/, '').split(/(?<=\.)\s+/);
+          doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
+          steps.forEach((step, idx) => doc.font('Helvetica').fontSize(12).text(`${idx + 1}. ${step.trim()}`));
+          doc.moveDown(0.5);
+        } else if (/^\*\*Prep & Cook Time:\*\*/.test(trimmed)) {
+          doc.font('Helvetica-Bold').fontSize(12).text('Prep & Cook Time:');
+          doc.font('Helvetica').fontSize(12).text(trimmed.replace(/^\*\*Prep & Cook Time:\*\*\s*/, ''));
+          doc.moveDown(0.5);
+        } else if (/^\*\*Macros per Serving:\*\*/.test(trimmed)) {
+          doc.font('Helvetica-Bold').fontSize(12).text('Macros per Serving:');
+          doc.font('Helvetica').fontSize(12).text(trimmed.replace(/^\*\*Macros per Serving:\*\*\s*/, ''));
         }
       });
     });
-  }
-
-  else {
+  } else {
     const lines = text.split('\n');
     lines.forEach((line, idx) => {
       const trimmed = line.trim();
@@ -113,6 +116,9 @@ export async function createPdfFromText(text, options = {}) {
       if (/^Meal Plan for /i.test(trimmed)) {
         doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
       } else if (/^(Day \d+:\s+\w+day.*?)$/i.test(trimmed)) {
+        doc.moveDown(0.5);
+        doc.font('Helvetica-Bold').fontSize(12).text(trimmed);
+      } else if (/^(Day \d+:\s+.*?)$/i.test(trimmed)) {
         doc.moveDown(0.5);
         doc.font('Helvetica-Bold').fontSize(12).text(trimmed);
       } else if (/^(Breakfast|Lunch|Supper|Snack):/i.test(trimmed)) {
