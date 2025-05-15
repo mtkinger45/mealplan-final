@@ -51,11 +51,7 @@ export async function createPdfFromText(text, options = {}) {
       doc.moveDown(0.3);
 
       lines.slice(1).forEach(item => {
-        const cleanedItem = item.trim()
-          .replace(/^[-–•]\s*/, '')
-          .replace(/^([\d.]+)\s+(\w+)\s+(.*)/, '$1 $3 $2')
-          .replace(/^([a-zA-Z]+):\s*(\d+)$/, '$2 $1');
-
+        const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
         if (cleanedItem) {
           safePageBreak(doc);
           doc.font('Helvetica').fontSize(12).text(`• ${cleanedItem}`);
@@ -68,7 +64,7 @@ export async function createPdfFromText(text, options = {}) {
 
   else if (options.type === 'recipes') {
     console.log('[PDF DEBUG] Generating recipe PDF...');
-    if (!text || text.trim().length === 0) {
+    if (!text || text.trim().length === 0 || /No recipes found/i.test(text)) {
       doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
       doc.end();
       return new Promise((resolve) => {
@@ -76,7 +72,7 @@ export async function createPdfFromText(text, options = {}) {
       });
     }
 
-    const blocks = text.split(/\n(?=\*\*Meal \d+ Name:\*\*)/g);
+    const blocks = text.split(/(?=\*\*Meal \d+ Name:\*\*)/g);
     blocks.forEach((block, index) => {
       if (index > 0) doc.addPage();
       const lines = block.trim().split('\n');
@@ -84,6 +80,7 @@ export async function createPdfFromText(text, options = {}) {
       lines.forEach(line => {
         safePageBreak(doc);
         const trimmed = line.trim();
+
         if (/^\*\*Meal \d+ Name:\*\*/.test(trimmed)) {
           doc.font('Helvetica-Bold').fontSize(14).text(trimmed.replace(/\*\*/g, ''));
         } else if (/^\*\*(Ingredients|Instructions|Prep & Cook Time|Macros per Serving):\*\*/.test(trimmed)) {
@@ -94,9 +91,9 @@ export async function createPdfFromText(text, options = {}) {
           doc.font('Helvetica').fontSize(12);
 
           if (label === 'Ingredients') {
-            value.split(',').map(i => i.trim()).forEach(i => doc.text(`• ${i}`));
+            value.split(/,|\n/).map(i => i.trim()).forEach(i => doc.text(`• ${i}`));
           } else if (label === 'Instructions') {
-            value.split(/(?<=\.)(?=\s*\w)/).map(i => i.trim()).forEach((step, idx) => {
+            value.split(/(?<=\.)\s+(?=\w)/).map(i => i.trim()).forEach((step, idx) => {
               doc.text(`${idx + 1}. ${step}`);
             });
           } else {
