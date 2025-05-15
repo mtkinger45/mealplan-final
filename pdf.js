@@ -42,7 +42,8 @@ export async function createPdfFromText(text, options = {}) {
 
     [...otherSections, ...onHandSection].forEach(section => {
       const lines = section.trim().split('\n');
-      const heading = lines[0].trim().replace(/:$/, '');
+      const headingLine = lines[0].trim();
+      const heading = headingLine.replace(/:$/, '');
 
       safePageBreak();
       doc.moveDown(1);
@@ -50,64 +51,64 @@ export async function createPdfFromText(text, options = {}) {
       doc.moveDown(0.3);
 
       lines.slice(1).forEach(item => {
-        safePageBreak();
         const cleanedItem = item.trim()
           .replace(/^[-–•]\s*/, '')
           .replace(/^([\d.]+)\s+(\w+)\s+(.*)/, '$1 $3 $2')
           .replace(/^([a-zA-Z]+):\s*(\d+)$/, '$2 $1');
 
         if (cleanedItem) {
+          safePageBreak();
           doc.font('Helvetica').fontSize(12).text(`• ${cleanedItem}`);
         }
       });
 
       doc.moveDown(1.5);
     });
-  }
-
-  else if (options.type === 'recipes') {
-    console.log('[PDF DEBUG] Generating recipe PDF...');
-    if (!text || text.trim().length === 0 || text.includes('No recipes')) {
+  } else if (options.type === 'recipes') {
+    if (!text || text.trim().length === 0 || text.includes('**No recipes')) {
       doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
       doc.end();
-      return new Promise((resolve) => {
-        doc.on('end', () => resolve(Buffer.concat(buffers)));
-      });
+      return new Promise(resolve => doc.on('end', () => resolve(Buffer.concat(buffers))));
     }
 
-    const recipes = text.split(/\n{2,}-{3,}\n{2,}/);
-    recipes.forEach(recipe => {
-      const lines = recipe.trim().split('\n');
-      doc.addPage();
+    const recipeSections = text.split(/---+/);
+
+    recipeSections.forEach((section, idx) => {
+      const lines = section.trim().split('\n');
+      if (idx > 0) doc.addPage();
 
       lines.forEach(line => {
         const trimmed = line.trim();
+        if (!trimmed) {
+          doc.moveDown(0.5);
+          return;
+        }
+
         safePageBreak();
 
-        if (/^\*\*Meal \d+ Name:\*\*/.test(trimmed)) {
-          doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
-        } else if (/^\*\*Ingredients:\*\*/.test(trimmed)) {
-          doc.moveDown(0.5);
+        if (/^\*\*Meal \d+ Name:\*\*/i.test(trimmed)) {
+          doc.font('Helvetica-Bold').fontSize(14).text(trimmed.replace(/^\*\*|\*\*$/g, ''));
+        } else if (/^\*\*Ingredients:\*\*/i.test(trimmed)) {
+          doc.moveDown(0.3);
           doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
-        } else if (/^\*\*Instructions:\*\*/.test(trimmed)) {
-          doc.moveDown(0.5);
+        } else if (/^\*\*Instructions:\*\*/i.test(trimmed)) {
+          doc.moveDown(0.3);
           doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
-        } else if (/^\*\*Prep & Cook Time:\*\*/.test(trimmed)) {
-          doc.moveDown(0.5);
-          doc.font('Helvetica-Bold').fontSize(12).text('Prep & Cook Time:');
-        } else if (/^\*\*Macros per Serving:\*\*/.test(trimmed)) {
-          doc.moveDown(0.5);
-          doc.font('Helvetica-Bold').fontSize(12).text('Macros per Serving:');
-        } else if (/^\d+\.\s/.test(trimmed)) {
+        } else if (/^\*\*Prep.*Time:\*\*/i.test(trimmed)) {
+          doc.moveDown(0.3);
+          doc.font('Helvetica').fontSize(12).text(trimmed.replace(/^\*\*|\*\*$/g, ''));
+        } else if (/^\*\*Macros.*:\*\*/i.test(trimmed)) {
+          doc.font('Helvetica').fontSize(12).text(trimmed.replace(/^\*\*|\*\*$/g, ''));
+        } else if (/^\d+\.\s+/.test(trimmed)) {
           doc.font('Helvetica').fontSize(12).text(trimmed);
+        } else if (/^-\s+/.test(trimmed)) {
+          doc.font('Helvetica').fontSize(12).text(`• ${trimmed.slice(2)}`);
         } else {
           doc.font('Helvetica').fontSize(12).text(trimmed);
         }
       });
     });
-  }
-
-  else {
+  } else {
     const lines = text.split('\n');
     lines.forEach((line, idx) => {
       const trimmed = line.trim();
@@ -118,13 +119,9 @@ export async function createPdfFromText(text, options = {}) {
       } else if (/^(Day \d+:\s+\w+day.*?)$/i.test(trimmed)) {
         doc.moveDown(0.5);
         doc.font('Helvetica-Bold').fontSize(12).text(trimmed);
-      } else if (/^(Day \d+:\s+.*?)$/i.test(trimmed)) {
-        doc.moveDown(0.5);
-        doc.font('Helvetica-Bold').fontSize(12).text(trimmed);
       } else if (/^(Breakfast|Lunch|Supper|Snack):/i.test(trimmed)) {
-        const label = trimmed.split(':')[0];
-        const name = trimmed.split(':').slice(1).join(':');
-        doc.font('Helvetica').fontSize(12).text(`${label}: ${name}`);
+        const [label, ...rest] = trimmed.split(':');
+        doc.font('Helvetica').fontSize(12).text(`${label}: ${rest.join(':')}`);
       } else {
         doc.font('Helvetica').fontSize(12).text(trimmed);
       }
@@ -135,7 +132,7 @@ export async function createPdfFromText(text, options = {}) {
 
   doc.end();
 
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     doc.on('end', () => {
       const pdfBuffer = Buffer.concat(buffers);
       resolve(pdfBuffer);
@@ -160,6 +157,5 @@ export async function uploadPdfToS3(buffer, filename) {
     Key: filename
   });
 
-  const url = await getSignedUrl(s3, getCommand, { expiresIn: 3600 });
-  return url;
+  return await getSignedUrl(s3, getCommand, { expiresIn: 3600 });
 }
