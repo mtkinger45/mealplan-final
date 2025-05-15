@@ -63,9 +63,7 @@ async function generateMealPlanData(data) {
   const cleanedInsights = extractRelevantInsights(calendarInsights, startDay, duration);
   const feedbackText = feedback ? `NOTE: The user has requested this revision: "${feedback}".` : '';
 
-  const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}.
-Do not include any other meals (e.g., skip Supper if it's not listed).
-
+  const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Each day should include: ${meals.join(', ')}.
 User Info:
 - Diet Type: ${dietType}
 - Preferences: ${dietaryPreferences}
@@ -80,7 +78,7 @@ ${feedbackText}
 Instructions:
 - Use ${startDay} as the first day and follow correct weekday order
 - Add a note next to the day name if calendar insights are relevant (e.g., Monday – Baseball night)
-- Do NOT use "Day 1", use weekday names only
+- Do NOT include meals not requested by user
 - Meals should be simple, realistic, and vary throughout the week
 - Omit detailed ingredients and instructions in this view
 - End with a shopping list that combines all ingredients and subtracts on-hand items.
@@ -89,6 +87,8 @@ Instructions:
 - Group shopping list items by category (Produce, Meat, Dairy, etc.)
 - Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities`;
 
+  console.log('[MEALPLAN REQUEST]', data);
+
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
     messages: [
@@ -96,12 +96,13 @@ Instructions:
       { role: 'user', content: prompt }
     ],
     temperature: 0.7,
-    max_tokens: 3500
+    max_tokens: 3000
   });
 
   const result = completion.choices?.[0]?.message?.content || '';
   const [mealPlanPart, shoppingListPart] = result.split(/(?=Shopping List)/i);
 
+  console.log('[MEAL PLAN OK]');
   return {
     mealPlan: stripFormatting(mealPlanPart?.trim() || ''),
     shoppingList: stripFormatting(shoppingListPart?.trim() || 'Shopping list coming soon...')
@@ -109,12 +110,8 @@ Instructions:
 }
 
 async function generateRecipes(data, mealPlan) {
-  const { people = 4, meals = ['Supper'] } = data;
-  const lines = mealPlan.split('\n').filter(l => {
-    const match = l.trim().match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i);
-    return match && meals.includes(match[2]);
-  });
-
+  const { people = 4 } = data;
+  const lines = mealPlan.split('\n').filter(l => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(l.trim()));
   const recipes = [];
 
   for (let i = 0; i < lines.length; i++) {
@@ -123,13 +120,15 @@ async function generateRecipes(data, mealPlan) {
     if (!match) continue;
 
     const [_, day, mealType, title] = match;
-    const prompt = `You are a recipe writer. Create a full recipe for the following meal:
+    const prompt = `You are a recipe writer. Write a recipe using the format below for ${people} people.
 
 **Meal ${i + 1} Name:** ${title}
-**Ingredients:** (list ingredients with U.S. quantities, scaled for ${people} people)
-**Instructions:** (step-by-step numbered instructions)
-**Prep & Cook Time:** (e.g., 10 min prep, 20 min cook)
-**Macros per Serving:** (protein, carbs, fat)`;
+**Ingredients:** List each ingredient with exact U.S. quantities.
+**Instructions:** List steps clearly, numbered.
+**Prep & Cook Time:** Estimated time.
+**Macros per Serving:** Include protein, carbs, fat.
+
+Focus on whole foods, simplicity, and accurate measures.`;
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4',
@@ -138,16 +137,18 @@ async function generateRecipes(data, mealPlan) {
         { role: 'user', content: prompt }
       ],
       temperature: 0.7,
-      max_tokens: 900
+      max_tokens: 1000
     });
 
-    const result = completion.choices?.[0]?.message?.content?.trim();
-    if (result) {
-      recipes.push(result);
-    }
+    const recipe = completion.choices?.[0]?.message?.content?.trim();
+    if (recipe) recipes.push(recipe);
   }
 
-  return recipes.length > 0 ? recipes.join('\n\n---\n\n') : '**No recipes could be generated based on the current meal plan.**';
+  if (recipes.length === 0) {
+    return '**No recipes could be generated based on the current meal plan.**';
+  }
+
+  return recipes.join('\n\n---\n\n');
 }
 
 app.post('/api/mealplan', async (req, res) => {
