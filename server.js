@@ -63,7 +63,9 @@ async function generateMealPlanData(data) {
   const cleanedInsights = extractRelevantInsights(calendarInsights, startDay, duration);
   const feedbackText = feedback ? `NOTE: The user has requested this revision: "${feedback}".` : '';
 
-  const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Each day should include: ${meals.join(', ')}.
+  const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}.
+Do not include any other meals (e.g., skip Supper if it's not listed).
+
 User Info:
 - Diet Type: ${dietType}
 - Preferences: ${dietaryPreferences}
