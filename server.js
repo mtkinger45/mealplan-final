@@ -22,9 +22,12 @@ app.use(cors({
       callback(new Error('CORS not allowed from this origin'));
     }
   },
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
 
+app.options('*', cors());
 app.use(bodyParser.json({ limit: '5mb' }));
 
 function weekdaySequence(startDay, duration) {
