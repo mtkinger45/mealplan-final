@@ -12,60 +12,21 @@ const s3 = new S3Client({
 });
 
 export async function createPdfFromText(text, options = {}) {
-  console.log('[createPdfFromText] Generating PDF for content...');
   const doc = new PDFDocument({ margin: 40, size: 'LETTER' });
   const buffers = [];
 
   doc.on('data', buffers.push.bind(buffers));
-  doc.on('end', () => console.log('[createPdfFromText] PDF generation complete.'));
+  doc.on('end', () => {
+    console.log('[createPdfFromText] PDF generation complete.');
+  });
 
-  const safePageBreak = () => {
-    if (doc.y > doc.page.height - doc.page.margins.bottom - 100) {
+  const safePageBreak = (threshold = 100) => {
+    if (doc.y > doc.page.height - doc.page.margins.bottom - threshold) {
       doc.addPage();
     }
   };
 
-  if (options.type === 'recipes') {
-    if (!text || text.includes('No recipes')) {
-      doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
-      doc.end();
-      return new Promise((resolve) => {
-        doc.on('end', () => resolve(Buffer.concat(buffers)));
-      });
-    }
-
-    const recipeChunks = text.split(/---+/);
-    recipeChunks.forEach(chunk => {
-      const lines = chunk.trim().split('\n');
-      doc.addPage();
-      lines.forEach((line, idx) => {
-        const trimmed = line.trim();
-        safePageBreak();
-
-        if (trimmed.startsWith('**Meal') && trimmed.includes('Name:**')) {
-          doc.font('Helvetica-Bold').fontSize(13).text(trimmed.replace(/\*\*/g, ''));
-        } else if (trimmed.startsWith('**Ingredients:**')) {
-          doc.moveDown(0.3);
-          doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
-        } else if (trimmed.startsWith('**Instructions:**')) {
-          doc.moveDown(0.3);
-          doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
-        } else if (trimmed.startsWith('**Prep & Cook Time:**')) {
-          doc.font('Helvetica').fontSize(12).text(trimmed.replace(/\*\*/g, ''));
-        } else if (trimmed.startsWith('**Macros:**')) {
-          doc.font('Helvetica').fontSize(12).text(trimmed.replace(/\*\*/g, ''));
-        } else {
-          if (/^\d+\./.test(trimmed)) {
-            doc.font('Helvetica').fontSize(12).text(trimmed);
-          } else if (/^- /.test(trimmed)) {
-            doc.font('Helvetica').fontSize(12).text(trimmed);
-          } else {
-            doc.font('Helvetica').fontSize(12).text(trimmed);
-          }
-        }
-      });
-    });
-  } else if (options.type === 'shoppingList') {
+  if (options.type === 'shoppingList') {
     const sections = text.split(/(?=^[A-Za-z ]+:)/m);
     const onHandSection = [];
     const otherSections = [];
@@ -80,7 +41,8 @@ export async function createPdfFromText(text, options = {}) {
 
     [...otherSections, ...onHandSection].forEach(section => {
       const lines = section.trim().split('\n');
-      const heading = lines[0].replace(/:$/, '');
+      const headingLine = lines[0].trim();
+      const heading = headingLine.replace(/:$/, '');
 
       safePageBreak();
       doc.moveDown(1);
@@ -89,15 +51,59 @@ export async function createPdfFromText(text, options = {}) {
 
       lines.slice(1).forEach(item => {
         safePageBreak();
-        const cleaned = item.trim().replace(/^[-–•]\s*/, '');
-        if (cleaned) {
-          doc.font('Helvetica').fontSize(12).text(`• ${cleaned}`);
+        const cleanedItem = item.trim()
+          .replace(/^[-–•]\s*/, '')
+          .replace(/^([\d.]+)\s+(\w+)\s+(.*)/, '$1 $3 $2')
+          .replace(/^([a-zA-Z]+):\s*(\d+)$/, '$2 $1');
+
+        if (cleanedItem) {
+          safePageBreak();
+          doc.font('Helvetica').fontSize(12).text(`• ${cleanedItem}`);
         }
       });
 
       doc.moveDown(1.5);
     });
-  } else {
+  }
+
+  else if (options.type === 'recipes') {
+    const lines = text.split('\n');
+    if (lines.length === 0 || lines.every(line => !line.trim())) {
+      doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
+    } else {
+      lines.forEach((line, idx) => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          doc.moveDown(1);
+          return;
+        }
+
+        safePageBreak();
+
+        if (/^\*\*Meal Name:\*\*/i.test(trimmed)) {
+          doc.addPage();
+          doc.font('Helvetica-Bold').fontSize(13).text(trimmed.replace(/^\*\*Meal Name:\*\*/i, 'Meal Name:'));
+        } else if (/^\*\*Ingredients:\*\*/i.test(trimmed)) {
+          doc.moveDown(0.5);
+          doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
+        } else if (/^-\s+/.test(trimmed)) {
+          doc.font('Helvetica').fontSize(12).text(trimmed);
+        } else if (/^\*\*Instructions:\*\*/i.test(trimmed)) {
+          doc.moveDown(0.5);
+          doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
+        } else if (/^\d+\.\s+/.test(trimmed)) {
+          doc.font('Helvetica').fontSize(12).text(trimmed);
+        } else if (/^\*\*Prep.*Time:\*\*/i.test(trimmed) || /^\*\*Macros:\*\*/i.test(trimmed)) {
+          doc.moveDown(0.3);
+          doc.font('Helvetica').fontSize(12).text(trimmed.replace(/\*\*/g, ''));
+        } else {
+          doc.font('Helvetica').fontSize(12).text(trimmed);
+        }
+      });
+    }
+  }
+
+  else {
     const lines = text.split('\n');
     lines.forEach((line, idx) => {
       const trimmed = line.trim();
@@ -124,15 +130,17 @@ export async function createPdfFromText(text, options = {}) {
   }
 
   doc.end();
+
   return new Promise((resolve) => {
-    doc.on('end', () => resolve(Buffer.concat(buffers)));
+    doc.on('end', () => {
+      const pdfBuffer = Buffer.concat(buffers);
+      resolve(pdfBuffer);
+    });
   });
 }
 
 export async function uploadPdfToS3(buffer, filename) {
-  console.log(`[uploadPdfToS3] Uploading ${filename} to S3...`);
   const bucketName = process.env.AWS_BUCKET_NAME;
-
   const uploadCommand = new PutObjectCommand({
     Bucket: bucketName,
     Key: filename,
@@ -147,5 +155,6 @@ export async function uploadPdfToS3(buffer, filename) {
     Key: filename
   });
 
-  return getSignedUrl(s3, getCommand, { expiresIn: 3600 });
+  const url = await getSignedUrl(s3, getCommand, { expiresIn: 3600 });
+  return url;
 }
