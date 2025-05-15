@@ -10,6 +10,9 @@ import path from 'path';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+app.options('/api/mealplan', cors());
+app.options('/api/pdf/:sessionId', cors());
+
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CACHE_DIR = './cache';
 
