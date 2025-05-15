@@ -49,12 +49,11 @@ export async function createPdfFromText(text, options = {}) {
       doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
     } else {
       const recipes = text.split(/---/);
-      let first = true;
-      for (const rec of recipes) {
-        const lines = rec.trim().split('\n');
-        if (!lines.length) continue;
-        if (!first) doc.addPage();
-        first = false;
+      for (let i = 0; i < recipes.length; i++) {
+        const rec = recipes[i].trim();
+        if (!rec) continue;
+        if (i > 0) doc.addPage();
+        const lines = rec.split('\n');
         for (const line of lines) {
           safePageBreak();
           const trimmed = line.trim();
@@ -72,7 +71,7 @@ export async function createPdfFromText(text, options = {}) {
             doc.font('Helvetica').fontSize(12).text(trimmed.replace(/^\*\*Prep Time:\*\*/, 'Prep Time:'));
           } else if (/^\*\*Macros:\*\*/.test(trimmed)) {
             doc.font('Helvetica').fontSize(12).text(trimmed.replace(/^\*\*Macros:\*\*/, 'Macros:'));
-          } else if (/^\-\s+/.test(trimmed)) {
+          } else if (/^-\s+/.test(trimmed)) {
             doc.font('Helvetica').fontSize(12).text(trimmed);
           } else if (/^\d+\.\s+/.test(trimmed)) {
             doc.font('Helvetica').fontSize(12).text(trimmed);
