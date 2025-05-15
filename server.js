@@ -98,47 +98,21 @@ Instructions:
   };
 }
 
-async function generateRecipes(data, mealPlan) {
-  const { people = 4 } = data;
-  const lines = mealPlan.split('\n').filter(line =>
-    /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(line.trim())
-  );
+$500 month minimum 6 months 
+Implementation on calls 
 
-  const recipes = [];
+7,000 followers 
+Remove not fit 
+Dm thank you for following me- we help people with xyz it’s free.  Do you know someone who would benefit from joining?
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const match = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):\s*(.*)$/i);
-    if (!match) continue;
+Dm cold strategy. Add them to spreadsheet.  Every week comment. 
 
-    const [_, day, mealType, title] = match;
-    const prompt = `You are a recipe writer. Write a full recipe for the following meal.
+Attracting. Message each person who likes a post.  Thanks for liking. Is meals planning something you struggle with?
 
-**Meal ${i + 1} Name:** ${title}
-**Ingredients:**
-List ingredients with U.S. measurements, scaled for ${people} people
-**Instructions:**
-Step-by-step instructions
-**Macros:**
-Include calories, protein, fat, carbs per serving`;
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [
-        { role: 'system', content: 'You are a professional recipe writer.' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.7,
-      max_tokens: 1000
-    });
+Lead gen strategies - partner training. Where are the people who have the problem I solve hanging out.  How can I get in front of them by linking arms with a trusted person. Show the people and give them great strategies for free. Who has ideal clients in fb group or podcasts    Make it about them and how it helps their people. 
 
-    const result = completion.choices?.[0]?.message?.content?.trim();
-    if (result) recipes.push(result);
-  }
-
-  return recipes.length ? recipes.join('\n\n') : '**No recipes could be generated based on the current meal plan.**';
-}
-
+or ads if system strategy skills and 10k
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
