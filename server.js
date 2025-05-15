@@ -118,16 +118,16 @@ async function generateRecipes(data, mealPlan) {
     if (!match) continue;
 
     const [_, day, type, title] = match;
-    const prompt = `You are a recipe writer. Write a full recipe in this format:
+    const prompt = `You are a recipe writer. Write a full recipe in the following format:
 **Meal Name:** ${title} (${day} ${type})
 **Ingredients:**
-- quantity and name
-- quantity and name
+- quantity ingredient
+- quantity ingredient
 **Instructions:**
-1. Step-by-step
-2. Step-by-step
-**Prep & Cook Time:** X mins
-**Macros:** Protein, Carbs, Fat, Calories`;
+1. Step one
+2. Step two
+**Prep & Cook Time:** XX minutes
+**Macros:** Protein: Xg, Carbs: Xg, Fat: Xg, Calories: XXX`;
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4',
@@ -136,7 +136,7 @@ async function generateRecipes(data, mealPlan) {
         { role: 'user', content: prompt }
       ],
       temperature: 0.6,
-      max_tokens: 1000
+      max_tokens: 800
     });
 
     const output = completion.choices?.[0]?.message?.content?.trim();
