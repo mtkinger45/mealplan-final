@@ -33,7 +33,7 @@ export async function createPdfFromText(text, options = {}) {
     const otherSections = [];
 
     sections.forEach(section => {
-      if (section.toLowerCase().includes('on-hand ingredients used')) {
+      if (section.includes('• On-hand Ingredients Used:')) {
         onHandSection.push(section);
       } else {
         otherSections.push(section);
@@ -51,6 +51,7 @@ export async function createPdfFromText(text, options = {}) {
       doc.moveDown(0.3);
 
       lines.slice(1).forEach(item => {
+        safePageBreak(doc);
         const cleanedItem = item.trim()
           .replace(/^[-–•]\s*/, '')
           .replace(/^([\d.]+)\s+(\w+)\s+(.*)/, '$1 $3 $2')
@@ -64,43 +65,67 @@ export async function createPdfFromText(text, options = {}) {
 
       doc.moveDown(1.5);
     });
-  } else if (options.type === 'recipes') {
-    console.log('[PDF DEBUG] Rendering recipe content');
-    if (!text || text.trim().length === 0 || /no recipes/i.test(text)) {
+  }
+
+  else if (options.type === 'recipes') {
+    console.log('[PDF DEBUG] Generating recipe PDF...');
+    if (!text || !text.includes('Ingredients:')) {
       doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
-    } else {
-      const recipes = text.split(/\n(?=\*\*.*\*\*\n)/);
-
-      recipes.forEach((block, idx) => {
-        const lines = block.trim().split('\n');
-        if (lines.length === 0) return;
-
-        if (idx > 0) doc.addPage();
-
-        lines.forEach((line, i) => {
-          const trimmed = line.trim();
-          safePageBreak(doc);
-
-          if (/^\*\*.*\*\*$/.test(trimmed)) {
-            doc.font('Helvetica-Bold').fontSize(14).text(trimmed.replace(/^\*\*|\*\*$/g, ''));
-          } else if (/^Ingredients:/i.test(trimmed)) {
-            doc.moveDown(0.3);
-            doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
-          } else if (/^Instructions:/i.test(trimmed)) {
-            doc.moveDown(0.3);
-            doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
-          } else if (/^Prep.*Time:/i.test(trimmed)) {
-            doc.moveDown(0.3);
-            doc.font('Helvetica').fontSize(12).text(trimmed);
-          } else if (/^Macros:/i.test(trimmed)) {
-            doc.font('Helvetica').fontSize(12).text(trimmed);
-          } else {
-            doc.font('Helvetica').fontSize(12).text(trimmed);
-          }
-        });
+      doc.end();
+      return new Promise((resolve) => {
+        doc.on('end', () => resolve(Buffer.concat(buffers)));
       });
     }
-  } else {
+
+    const lines = text.split('\n');
+    let inIngredients = false;
+    let inInstructions = false;
+
+    lines.forEach((line, idx) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        doc.moveDown(1);
+        return;
+      }
+
+      safePageBreak(doc);
+
+      if (/^\*\*(.+?): (.+?)\*\*/.test(trimmed)) {
+        doc.addPage();
+        doc.font('Helvetica-Bold').fontSize(14).text(trimmed.replace(/\*\*/g, ''));
+      } else if (/^Ingredients:/i.test(trimmed)) {
+        inIngredients = true;
+        inInstructions = false;
+        doc.moveDown(0.3);
+        doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
+      } else if (/^Instructions:/i.test(trimmed)) {
+        inIngredients = false;
+        inInstructions = true;
+        doc.moveDown(0.3);
+        doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
+      } else if (/^Prep.*Time:/i.test(trimmed)) {
+        inIngredients = false;
+        inInstructions = false;
+        doc.moveDown(0.3);
+        doc.font('Helvetica').fontSize(12).text(trimmed);
+      } else if (/^Macros:/i.test(trimmed)) {
+        inIngredients = false;
+        inInstructions = false;
+        doc.font('Helvetica').fontSize(12).text(trimmed);
+        doc.addPage();
+      } else {
+        if (inIngredients) {
+          doc.font('Helvetica').fontSize(12).text(trimmed);
+        } else if (inInstructions && /^\d+\.\s+/.test(trimmed)) {
+          doc.font('Helvetica').fontSize(12).text(trimmed);
+        } else {
+          doc.font('Helvetica').fontSize(12).text(trimmed);
+        }
+      }
+    });
+  }
+
+  else {
     const lines = text.split('\n');
     lines.forEach((line, idx) => {
       const trimmed = line.trim();
