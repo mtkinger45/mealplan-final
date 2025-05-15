@@ -21,7 +21,7 @@ export async function createPdfFromText(text, options = {}) {
     console.log('[createPdfFromText] PDF generation complete.');
   });
 
-  const safePageBreak = (doc, threshold = 100) => {
+  const safePageBreak = (threshold = 100) => {
     if (doc.y > doc.page.height - doc.page.margins.bottom - threshold) {
       doc.addPage();
     }
@@ -33,7 +33,7 @@ export async function createPdfFromText(text, options = {}) {
     const otherSections = [];
 
     sections.forEach(section => {
-      if (section.includes('• On-hand Ingredients Used:')) {
+      if (section.includes('On-hand Ingredients Used')) {
         onHandSection.push(section);
       } else {
         otherSections.push(section);
@@ -45,68 +45,54 @@ export async function createPdfFromText(text, options = {}) {
       const headingLine = lines[0].trim();
       const heading = headingLine.replace(/:$/, '');
 
-      safePageBreak(doc);
+      safePageBreak();
       doc.moveDown(1);
       doc.font('Helvetica-Bold').fontSize(13).text(heading);
       doc.moveDown(0.3);
 
       lines.slice(1).forEach(item => {
-        safePageBreak(doc);
-        const cleanedItem = item.trim()
-          .replace(/^[-–•]\s*/, '')
-          .replace(/^([\d.]+)\s+(\w+)\s+(.*)/, '$1 $3 $2')
-          .replace(/^([a-zA-Z]+):\s*(\d+)$/, '$2 $1');
-
+        const cleanedItem = item.trim().replace(/^[-–•]\s*/, '');
         if (cleanedItem) {
-          safePageBreak(doc);
+          safePageBreak();
           doc.font('Helvetica').fontSize(12).text(`• ${cleanedItem}`);
         }
       });
 
-      doc.moveDown(1.5);
+      doc.moveDown(1);
     });
   } else if (options.type === 'recipes') {
-    console.log('[PDF DEBUG] Generating recipe PDF...');
-    if (!text || !text.includes('**Ingredients:**')) {
-      doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
-      doc.end();
-      return new Promise((resolve) => {
-        doc.on('end', () => resolve(Buffer.concat(buffers)));
+    const sections = text.split(/(?=\*\*Meal \d+ Name:\*\*)/);
+    if (sections.length === 0 || !sections[0].trim()) {
+      doc.font('Helvetica').fontSize(12).text('⚠️ No recipes found or failed to generate.');
+    } else {
+      sections.forEach((section, idx) => {
+        if (!section.trim()) return;
+        const lines = section.split('\n');
+        lines.forEach((line, i) => {
+          const trimmed = line.trim();
+          if (!trimmed) {
+            doc.moveDown(0.5);
+            return;
+          }
+          safePageBreak();
+          if (/^\*\*.*:\*\*/.test(trimmed)) {
+            doc.font('Helvetica-Bold').fontSize(12).text(trimmed.replace(/\*\*/g, ''));
+          } else {
+            doc.font('Helvetica').fontSize(12).text(trimmed);
+          }
+        });
+        if (idx < sections.length - 1) doc.addPage();
       });
     }
-
-    const lines = text.split('\n');
-    lines.forEach((line, idx) => {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        doc.moveDown(1);
-        return;
-      }
-
-      safePageBreak(doc);
-
-      if (/^\*\*Meal \d+ Name:\*\*/i.test(trimmed)) {
-        doc.addPage();
-        doc.font('Helvetica-Bold').fontSize(14).text(trimmed.replace(/\*\*/g, ''));
-      } else if (/^\*\*(Ingredients|Instructions|Macros):\*\*/i.test(trimmed)) {
-        doc.moveDown(0.3);
-        doc.font('Helvetica-Bold').fontSize(12).text(trimmed.replace(/\*\*/g, ''));
-      } else {
-        doc.font('Helvetica').fontSize(12).text(trimmed);
-      }
-    });
   } else {
     const lines = text.split('\n');
     lines.forEach((line, idx) => {
       const trimmed = line.trim();
-      safePageBreak(doc);
+      safePageBreak();
 
       if (/^Meal Plan for /i.test(trimmed)) {
         doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
       } else if (/^(Day \d+:\s+\w+day.*?)$/i.test(trimmed)) {
-        doc.moveDown(0.5);
-        doc.font('Helvetica-Bold').fontSize(12).text(trimmed);
-      } else if (/^(Day \d+:\s+.*?)$/i.test(trimmed)) {
         doc.moveDown(0.5);
         doc.font('Helvetica-Bold').fontSize(12).text(trimmed);
       } else if (/^(Breakfast|Lunch|Supper|Snack):/i.test(trimmed)) {
