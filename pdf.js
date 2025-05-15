@@ -33,7 +33,7 @@ export async function createPdfFromText(text, options = {}) {
     const otherSections = [];
 
     sections.forEach(section => {
-      if (section.includes('• On-hand Ingredients Used:')) {
+      if (section.toLowerCase().includes('on-hand ingredients used')) {
         onHandSection.push(section);
       } else {
         otherSections.push(section);
@@ -51,7 +51,6 @@ export async function createPdfFromText(text, options = {}) {
       doc.moveDown(0.3);
 
       lines.slice(1).forEach(item => {
-        safePageBreak(doc);
         const cleanedItem = item.trim()
           .replace(/^[-–•]\s*/, '')
           .replace(/^([\d.]+)\s+(\w+)\s+(.*)/, '$1 $3 $2')
@@ -66,44 +65,34 @@ export async function createPdfFromText(text, options = {}) {
       doc.moveDown(1.5);
     });
   } else if (options.type === 'recipes') {
-    console.log('[PDF DEBUG] Generating recipe PDF...');
-    if (!text || text.trim().length === 0 || text.includes('⚠️ Recipe could not be generated.')) {
+    if (!text || text.trim().length === 0 || text.includes('No recipes')) {
       doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
-      doc.end();
-      return new Promise((resolve) => {
-        doc.on('end', () => resolve(Buffer.concat(buffers)));
+    } else {
+      const lines = text.split('\n');
+      lines.forEach((line, idx) => {
+        const trimmed = line.trim();
+        safePageBreak(doc);
+
+        if (/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(trimmed)) {
+          doc.addPage();
+          doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
+        } else if (/^Ingredients:/i.test(trimmed)) {
+          doc.moveDown(0.3);
+          doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
+        } else if (/^Instructions:/i.test(trimmed)) {
+          doc.moveDown(0.3);
+          doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
+        } else if (/^Prep.*Time:/i.test(trimmed)) {
+          doc.moveDown(0.3);
+          doc.font('Helvetica').fontSize(12).text(trimmed);
+        } else if (/^Macros:/i.test(trimmed)) {
+          doc.font('Helvetica').fontSize(12).text(trimmed);
+          doc.addPage();
+        } else {
+          doc.font('Helvetica').fontSize(12).text(trimmed);
+        }
       });
     }
-
-    const lines = text.split('\n');
-    lines.forEach((line, idx) => {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        doc.moveDown(1);
-        return;
-      }
-
-      safePageBreak(doc);
-
-      if (/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(trimmed)) {
-        doc.addPage();
-        doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
-      } else if (/^Ingredients:/i.test(trimmed)) {
-        doc.moveDown(0.3);
-        doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
-      } else if (/^Instructions:/i.test(trimmed)) {
-        doc.moveDown(0.3);
-        doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
-      } else if (/^Prep.*Time:/i.test(trimmed)) {
-        doc.moveDown(0.3);
-        doc.font('Helvetica').fontSize(12).text(trimmed);
-      } else if (/^Macros:/i.test(trimmed)) {
-        doc.font('Helvetica').fontSize(12).text(trimmed);
-        doc.addPage();
-      } else {
-        doc.font('Helvetica').fontSize(12).text(trimmed);
-      }
-    });
   } else {
     const lines = text.split('\n');
     lines.forEach((line, idx) => {
