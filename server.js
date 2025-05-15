@@ -1,4 +1,3 @@
-
 // server.js
 import express from 'express';
 import bodyParser from 'body-parser';
@@ -11,12 +10,12 @@ import path from 'path';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CACHE_DIR = './cache';
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
 app.use(cors({
-  origin: function (origin, callback) {
+  origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -80,7 +79,7 @@ ${feedbackText}
 Instructions:
 - Use ${startDay} as the first day and follow correct weekday order
 - Add a note next to the day name if calendar insights are relevant (e.g., Monday – Baseball night)
-- Do NOT include any meals not specified
+- Do NOT use "Day 1", use weekday names only
 - Meals should be simple, realistic, and vary throughout the week
 - Omit detailed ingredients and instructions in this view
 - End with a shopping list that combines all ingredients and subtracts on-hand items.
@@ -96,7 +95,7 @@ Instructions:
       { role: 'user', content: prompt }
     ],
     temperature: 0.7,
-    max_tokens: 3500
+    max_tokens: 4000
   });
 
   const result = completion.choices?.[0]?.message?.content || '';
@@ -110,26 +109,20 @@ Instructions:
 
 async function generateRecipes(data, mealPlan) {
   const { people = 4 } = data;
-  const lines = mealPlan.split('\n').filter(l => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(l.trim()));
+  const lines = mealPlan.split('\n').filter(line => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) (Breakfast|Lunch|Supper):/i.test(line.trim()));
 
-  if (!lines.length) return '**No recipes could be generated based on the current meal plan.**';
-
-  let recipeText = '';
-  let mealIndex = 1;
-  for (const line of lines) {
-    const match = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):\s*(.*)$/i);
+  const recipes = [];
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) (Breakfast|Lunch|Supper):\s*(.+)$/);
     if (!match) continue;
     const [_, day, mealType, title] = match;
 
-    const prompt = `You are a professional recipe writer. Write a recipe in the following format:
-
-**Meal ${mealIndex} Name:** ${title}
-**Ingredients:** List each ingredient on its own line with quantity and unit.
-**Instructions:** Numbered step-by-step instructions.
-**Prep & Cook Time:** Total time in minutes.
-**Macros:** Protein, Carbs, Fat per serving.
-
-Scale the recipe for ${people} servings. Use clean, structured formatting.`;
+    const prompt = `Write a clearly formatted recipe for the following:
+**Meal ${i + 1} Name:** ${title}
+**Ingredients:** list with quantities for ${people} people
+**Instructions:** step-by-step cooking instructions
+**Prep & Cook Time:** in minutes
+**Macros:** estimated macros per serving`;
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4',
@@ -142,13 +135,10 @@ Scale the recipe for ${people} servings. Use clean, structured formatting.`;
     });
 
     const recipe = completion.choices?.[0]?.message?.content?.trim();
-    if (recipe) {
-      recipeText += `${recipe}\n\n`;
-      mealIndex++;
-    }
+    if (recipe) recipes.push(recipe);
   }
 
-  return recipeText || '**No recipes could be generated based on the current meal plan.**';
+  return recipes.length > 0 ? recipes.join('\n\n---\n\n') : '**No recipes could be generated based on the current meal plan.**';
 }
 
 app.post('/api/mealplan', async (req, res) => {
@@ -167,7 +157,7 @@ app.post('/api/mealplan', async (req, res) => {
 
     res.json({ sessionId, ...mealPlanData, recipes });
   } catch (err) {
-    console.error('[API ERROR]', err);
+    console.error('[API ERROR]', err.message);
     res.status(500).json({ error: 'Error generating meal plan.' });
   }
 });
@@ -202,7 +192,7 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
     const url = await uploadPdfToS3(buffer, filename);
     res.json({ url });
   } catch (err) {
-    console.error('[PDF ERROR]', err);
+    console.error('PDF generation error:', err);
     res.status(404).json({ error: 'PDF or session not found.' });
   }
 });
