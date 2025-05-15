@@ -99,6 +99,19 @@ Instructions:
   };
 }
 
+async function fetchRecipe(prompt) {
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [
+      { role: 'system', content: 'You are a professional recipe writer.' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.7,
+    max_tokens: 1000
+  });
+  return completion.choices?.[0]?.message?.content?.trim() || null;
+}
+
 async function generateRecipes(data, mealPlan) {
   const { people = 4 } = data;
   const lines = mealPlan.split('\n').filter(line => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(line.trim()));
@@ -109,26 +122,23 @@ async function generateRecipes(data, mealPlan) {
     if (!match) continue;
 
     const [_, day, mealType, title] = match;
-    const prompt = `You are a recipe writer. Write a complete recipe.
+    const prompt = `You MUST return the following format:
+
 **Meal Name:** ${day} ${mealType}: ${title}
 **Ingredients:**
-- List ingredients with exact U.S. measurements for ${people} people.
+- [ingredient and quantity]
 **Instructions:**
-1. Write step-by-step instructions.
-**Prep Time:** X minutes
-**Macros:** Protein, Carbs, Fat per serving`;
+1. [step one]
+2. [step two]
+**Prep Time:** 10 minutes
+**Macros:** Protein: Xg, Carbs: Xg, Fat: Xg`;
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [
-        { role: 'system', content: 'You are a professional recipe writer.' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.7,
-      max_tokens: 1000
-    });
+    let content = await fetchRecipe(prompt);
+    if (!content) {
+      console.warn(`[RETRY] Recipe failed for ${day} ${mealType}, retrying...`);
+      content = await fetchRecipe(prompt);
+    }
 
-    const content = completion.choices?.[0]?.message?.content?.trim();
     if (content) recipes.push(content);
   }
 
