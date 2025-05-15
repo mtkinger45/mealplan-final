@@ -10,21 +10,13 @@ import path from 'path';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CACHE_DIR = './cache';
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS not allowed from this origin'));
-    }
-  },
+  origin: ['https://thechaostoconfidencecollective.com'],
   credentials: true
 }));
-
 app.use(bodyParser.json({ limit: '5mb' }));
 
 function weekdaySequence(startDay, duration) {
@@ -109,25 +101,22 @@ Instructions:
 
 async function generateRecipes(data, mealPlan) {
   const { people = 4 } = data;
-  const lines = mealPlan.split('\n');
-  const recipeLines = lines.filter(l => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) (Breakfast|Lunch|Supper):/i.test(l));
+  const lines = mealPlan.split('\n').filter(line => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(line.trim()));
   const recipes = [];
 
-  for (const line of recipeLines) {
-    const match = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) (Breakfast|Lunch|Supper):\s*(.*)$/i);
+  for (const line of lines) {
+    const match = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):\s*(.*)$/i);
     if (!match) continue;
 
-    const [_, day, type, title] = match;
-    const prompt = `You are a recipe writer. Write a full recipe in the following format:
-**Meal Name:** ${title} (${day} ${type})
+    const [_, day, mealType, title] = match;
+    const prompt = `You are a recipe writer. Write a complete recipe.
+**Meal Name:** ${day} ${mealType}: ${title}
 **Ingredients:**
-- quantity ingredient
-- quantity ingredient
+- List ingredients with exact U.S. measurements for ${people} people.
 **Instructions:**
-1. Step one
-2. Step two
-**Prep & Cook Time:** XX minutes
-**Macros:** Protein: Xg, Carbs: Xg, Fat: Xg, Calories: XXX`;
+1. Write step-by-step instructions.
+**Prep Time:** X minutes
+**Macros:** Protein, Carbs, Fat per serving`;
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4',
@@ -135,15 +124,15 @@ async function generateRecipes(data, mealPlan) {
         { role: 'system', content: 'You are a professional recipe writer.' },
         { role: 'user', content: prompt }
       ],
-      temperature: 0.6,
-      max_tokens: 800
+      temperature: 0.7,
+      max_tokens: 1000
     });
 
-    const output = completion.choices?.[0]?.message?.content?.trim();
-    if (output) recipes.push(output);
+    const content = completion.choices?.[0]?.message?.content?.trim();
+    if (content) recipes.push(content);
   }
 
-  return recipes.length ? recipes.join('\n\n---\n\n') : '**No recipes could be generated based on the current meal plan.**';
+  return recipes.length > 0 ? recipes.join('\n\n---\n\n') : '**No recipes could be generated based on the current meal plan.**';
 }
 
 app.post('/api/mealplan', async (req, res) => {
@@ -174,8 +163,7 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
 
   try {
     const cache = JSON.parse(await fs.readFile(filePath, 'utf-8'));
-    let content = '';
-    let filename = '';
+    let content = '', filename = '';
 
     if (type === 'mealplan') {
       content = `Meal Plan for ${cache.name}\n\n${cache.mealPlan}`;
