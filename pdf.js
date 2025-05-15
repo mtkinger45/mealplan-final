@@ -65,7 +65,8 @@ export async function createPdfFromText(text, options = {}) {
       doc.moveDown(1.5);
     });
   } else if (options.type === 'recipes') {
-    if (!text || text.trim().length === 0 || text.includes('No recipes')) {
+    console.log('[PDF DEBUG] Rendering recipe content');
+    if (!text || text.trim().length === 0 || /no recipes/i.test(text)) {
       doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
     } else {
       const lines = text.split('\n');
@@ -73,9 +74,9 @@ export async function createPdfFromText(text, options = {}) {
         const trimmed = line.trim();
         safePageBreak(doc);
 
-        if (/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(trimmed)) {
+        if (/^\*\*.*\*\*$/.test(trimmed)) {
           doc.addPage();
-          doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
+          doc.font('Helvetica-Bold').fontSize(14).text(trimmed.replace(/^\*\*|\*\*$/g, ''));
         } else if (/^Ingredients:/i.test(trimmed)) {
           doc.moveDown(0.3);
           doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
