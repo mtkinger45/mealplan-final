@@ -13,10 +13,18 @@ const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CACHE_DIR = './cache';
 
+const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
 app.use(cors({
-  origin: 'https://thechaostoconfidencecollective.com',
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS not allowed from this origin'));
+    }
+  },
   credentials: true
 }));
+
 app.use(bodyParser.json({ limit: '5mb' }));
 
 function weekdaySequence(startDay, duration) {
@@ -27,7 +35,7 @@ function weekdaySequence(startDay, duration) {
 
 function extractRelevantInsights(calendarInsights, startDay, duration) {
   const days = weekdaySequence(startDay, duration);
-  const insights = calendarInsights.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+  const insights = calendarInsights.split(/[,]/).map(s => s.trim()).filter(Boolean);
   return insights.filter(line => days.some(day => line.toLowerCase().includes(day.toLowerCase()))).join(', ');
 }
 
@@ -86,7 +94,7 @@ Instructions:
       { role: 'user', content: prompt }
     ],
     temperature: 0.7,
-    max_tokens: 3500
+    max_tokens: 3000
   });
 
   const result = completion.choices?.[0]?.message?.content || '';
@@ -100,43 +108,32 @@ Instructions:
 
 async function generateRecipes(data, mealPlan) {
   const { people = 4 } = data;
-  const lines = mealPlan.split('\n').filter(line =>
-    /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(line.trim())
-  );
 
-  const recipes = [];
+  const prompt = `You are a professional recipe writer. Based on the following meal plan, write full recipes for each meal using this exact format:
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const match = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):\s*(.*)$/i);
-    if (!match) continue;
+**Meal 1 Name:** Scrambled Eggs & Bacon
+**Ingredients:** eggs, bacon, ghee
+**Instructions:** Heat a skillet over medium heat. Cook bacon until crispy. Scramble eggs in a separate pan with ghee.
+**Prep & Cook Time:** 5 min prep, 10 min cook
+**Macros per Serving:** Protein: 25g, Fat: 18g, Carbs: 2g
 
-    const [_, day, mealType, title] = match;
-    const prompt = `You are a recipe writer. Write a full recipe for the following meal.
+Repeat this structure for all meals. Do not add any additional explanation. No headers or footers. No summaries.
 
-**Meal ${i + 1} Name:** ${title}
-**Ingredients:**
-List ingredients with U.S. measurements, scaled for ${people} people
-**Instructions:**
-Step-by-step instructions
-**Macros:**
-Include calories, protein, fat, carbs per serving`;
+Meal Plan:
+${mealPlan}`;
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [
-        { role: 'system', content: 'You are a professional recipe writer.' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.7,
-      max_tokens: 1000
-    });
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [
+      { role: 'system', content: 'You are a professional recipe writer.' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.7,
+    max_tokens: 6000
+  });
 
-    const result = completion.choices?.[0]?.message?.content?.trim();
-    if (result) recipes.push(result);
-  }
-
-  return recipes.length ? recipes.join('\n\n') : '**No recipes could be generated based on the current meal plan.**';
+  const result = completion.choices?.[0]?.message?.content?.trim() || '';
+  return result.length > 0 ? result : '**No recipes could be generated based on the current meal plan.**';
 }
 
 app.post('/api/mealplan', async (req, res) => {
@@ -160,7 +157,7 @@ app.post('/api/mealplan', async (req, res) => {
       recipes
     });
   } catch (err) {
-    console.error('[API ERROR]', err);
+    console.error('[API ERROR]', err.message);
     res.status(500).json({ error: 'Error generating meal plan.' });
   }
 });
