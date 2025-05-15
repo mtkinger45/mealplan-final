@@ -96,19 +96,22 @@ Instructions:
 }
 
 async function generateRecipes(data, mealPlan) {
+  console.log('[RECIPE GEN] Starting individual recipe generation...');
   const { people = 4 } = data;
   const lines = mealPlan.split('\n').filter(l =>
     /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):/i.test(l.trim())
   );
 
-  let fullRecipes = [];
+  const recipes = [];
 
   for (const line of lines) {
     const match = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s(Breakfast|Lunch|Supper):\s*(.*)$/i);
     if (!match) continue;
 
     const [_, day, mealType, title] = match;
-    const prompt = `You are a recipe writer. Write a full recipe for the following meal.
+
+    const prompt = `You are a recipe writer. Write a full recipe for the following meal:
+
 Meal Title: ${title}
 Day: ${day}
 Meal Type: ${mealType}
@@ -132,14 +135,19 @@ Include:
       max_tokens: 1000
     });
 
-    const recipeContent = completion.choices?.[0]?.message?.content?.trim();
-    if (recipeContent) {
-      fullRecipes.push(`${day} ${mealType}: ${title}\n${stripFormatting(recipeContent)}`);
+    const result = completion.choices?.[0]?.message?.content?.trim();
+    if (result) {
+      recipes.push(`**${day} ${mealType}: ${title}**\n${result}`);
+    } else {
+      console.warn(`[RECIPE GEN] GPT returned empty for ${day} ${mealType}`);
     }
   }
 
-  return fullRecipes.length ? fullRecipes.join('\n\n---\n\n') : '**No recipes could be generated based on the current meal plan.**';
+  const finalOutput = recipes.length ? recipes.join('\n\n---\n\n') : '**No recipes could be generated based on the current meal plan.**';
+  console.log('[RECIPE GEN] Final recipe length:', finalOutput.length);
+  return finalOutput;
 }
+
 
 app.post('/api/mealplan', async (req, res) => {
   try {
