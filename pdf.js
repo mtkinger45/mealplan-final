@@ -1,4 +1,4 @@
-""// pdf.js
+// pdf.js
 import PDFDocument from 'pdfkit';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -14,7 +14,6 @@ const s3 = new S3Client({
 export async function createPdfFromText(text, options = {}) {
   const doc = new PDFDocument({ margin: 40, size: 'LETTER' });
   const buffers = [];
-
   doc.on('data', buffers.push.bind(buffers));
 
   const safePageBreak = (threshold = 100) => {
@@ -45,9 +44,7 @@ export async function createPdfFromText(text, options = {}) {
       }
       doc.moveDown(1.5);
     }
-  }
-
-  else if (options.type === 'recipes') {
+  } else if (options.type === 'recipes') {
     if (!text || text.trim().length === 0 || text.includes('No recipes')) {
       doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
     } else {
@@ -55,7 +52,6 @@ export async function createPdfFromText(text, options = {}) {
       for (const rec of recipes) {
         const lines = rec.trim().split('\n');
         if (!lines.length) continue;
-
         doc.addPage();
         for (const line of lines) {
           safePageBreak();
@@ -74,7 +70,7 @@ export async function createPdfFromText(text, options = {}) {
             doc.font('Helvetica').fontSize(12).text(trimmed.replace(/^\*\*Prep Time:\*\*/, 'Prep Time:'));
           } else if (/^\*\*Macros:\*\*/.test(trimmed)) {
             doc.font('Helvetica').fontSize(12).text(trimmed.replace(/^\*\*Macros:\*\*/, 'Macros:'));
-          } else if (/^-\s+/.test(trimmed)) {
+          } else if (/^\-\s+/.test(trimmed)) {
             doc.font('Helvetica').fontSize(12).text(trimmed);
           } else if (/^\d+\.\s+/.test(trimmed)) {
             doc.font('Helvetica').fontSize(12).text(trimmed);
@@ -84,9 +80,7 @@ export async function createPdfFromText(text, options = {}) {
         }
       }
     }
-  }
-
-  else {
+  } else {
     const lines = text.split('\n');
     for (const line of lines) {
       safePageBreak();
