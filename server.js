@@ -10,154 +10,35 @@ import path from 'path';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const CACHE_DIR = './cache';
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const CACHE_DIR = './cache';
 
-app.use(cors({
-  origin: 'https://thechaostoconfidencecollective.com',
-  credentials: true
-}));
-
+app.use(cors({ origin: true }));
 app.use(bodyParser.json({ limit: '5mb' }));
 
-function weekdaySequence(startDay, duration) {
-  const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  const startIndex = weekdays.indexOf(startDay);
-  return Array.from({ length: duration }, (_, i) => weekdays[(startIndex + i) % 7]);
-}
-
-function extractRelevantInsights(calendarInsights, startDay, duration) {
-  const days = weekdaySequence(startDay, duration);
-  const insights = calendarInsights.split(/[,]/).map(s => s.trim()).filter(Boolean);
-  return insights.filter(line => days.some(day => line.toLowerCase().includes(day.toLowerCase()))).join(', ');
-}
-
 function stripFormatting(text) {
-  return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*/g, '');
-}
-
-async function generateMealPlanData(data) {
-  const {
-    duration = 7,
-    startDay = 'Monday',
-    meals = ['Supper'],
-    dietType = 'Any',
-    dietaryPreferences = 'None',
-    mealStyle = 'Any',
-    cookingRequests = 'None',
-    appliances = [],
-    onHandIngredients = 'None',
-    calendarInsights = 'None',
-    feedback = '',
-    people = 4,
-    name = 'Guest'
-  } = data;
-
-  const cleanedInsights = extractRelevantInsights(calendarInsights, startDay, duration);
-  const feedbackText = feedback ? `NOTE: The user has requested this revision: "${feedback}".` : '';
-
-  const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}.
-Do not include any other meals (e.g., skip Supper if it's not listed).
-User Info:
-- Diet Type: ${dietType}
-- Preferences: ${dietaryPreferences}
-- Cooking Style: ${mealStyle}
-- Special Requests: ${cookingRequests}
-- Appliances: ${appliances.join(', ') || 'None'}
-- On-hand Ingredients: ${onHandIngredients}
-- Household size: ${people}
-- Calendar Insights: ${cleanedInsights || 'None'}
-${feedbackText}
-
-Instructions:
-- Use ${startDay} as the first day and follow correct weekday order
-- Add a note next to the day name if calendar insights are relevant (e.g., Monday – Baseball night)
-- Meals should be simple, realistic, and vary throughout the week
-- Omit detailed ingredients and instructions in this view
-- End with a shopping list that combines all ingredients and subtracts on-hand items.
-- Calculate total ingredient quantities based on household size
-- Use U.S. measurements (e.g., cups, oz, lbs)
-- Group shopping list items by category (Produce, Meat, Dairy, etc.)
-- Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities
-- At the end, provide a JSON list of the meals in this format:
-[
-  {"day": "Monday", "meal": "Breakfast", "title": "Scrambled Eggs & Bacon"},
-  {"day": "Monday", "meal": "Lunch", "title": "Chicken Salad"},
-  ...
-]`;
-
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4',
-    messages: [
-      { role: 'system', content: 'You are a professional meal planner.' },
-      { role: 'user', content: prompt }
-    ],
-    temperature: 0.7,
-    max_tokens: 3000
-  });
-
-  const result = completion.choices?.[0]?.message?.content || '';
-  const [mealPlanPart, shoppingListPart] = result.split(/(?=Shopping List)/i);
-  const jsonBlockMatch = result.match(/\[\s*{[\s\S]*?}\s*\]/);
-  const mealList = jsonBlockMatch ? JSON.parse(jsonBlockMatch[0]) : [];
-
-  return {
-    mealPlan: stripFormatting(mealPlanPart?.trim() || ''),
-    shoppingList: stripFormatting(shoppingListPart?.trim() || 'Shopping list coming soon...'),
-    mealList
-  };
-}
-
-async function generateRecipes(data, mealList) {
-  const { people = 4 } = data;
-  const recipes = [];
-
-  for (const { day, meal, title } of mealList) {
-    const prompt = `You are a professional recipe writer. Generate a recipe for the following meal in this exact format:
-
-**Meal Name:** ${day} ${meal} - ${title}
-**Ingredients:**
-- [List all ingredients with accurate U.S. measurements for ${people} people]
-**Instructions:**
-1. [Step-by-step instructions to cook the meal.]
-**Prep Time:** X minutes
-**Macros:** X grams protein, X grams fat, X grams carbs`;
-
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [
-        { role: 'system', content: 'You are a professional recipe writer.' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.7,
-      max_tokens: 1000
-    });
-
-    const content = completion.choices?.[0]?.message?.content?.trim();
-    if (content) recipes.push(content);
-  }
-
-  return recipes.length > 0 ? recipes.join('\n---\n') : '**No recipes could be generated based on the current meal plan.**';
+  return text.replace(/<[^>]*>/g, '').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*/g, '');
 }
 
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
     const sessionId = randomUUID();
-    const mealPlanData = await generateMealPlanData(data);
-    const recipes = await generateRecipes(data, mealPlanData.mealList);
+    const { mealPlan, shoppingList, recipeInfoList } = await generateMealPlan(data);
+    const recipes = await generateRecipesParallel(data, recipeInfoList);
 
     await fs.mkdir(CACHE_DIR, { recursive: true });
     await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify({
       name: data.name || 'Guest',
-      ...mealPlanData,
+      mealPlan,
+      shoppingList,
       recipes
     }, null, 2));
 
-    res.json({ sessionId, ...mealPlanData, recipes });
+    res.json({ sessionId, mealPlan, shoppingList, recipes });
   } catch (err) {
-    console.error('[ERROR]', err);
-    res.status(500).json({ error: 'Error generating meal plan.' });
+    console.error('[API ERROR]', err);
+    res.status(500).json({ error: 'Meal plan generation failed.' });
   }
 });
 
@@ -184,18 +65,83 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
       return res.status(400).json({ error: 'Invalid type parameter.' });
     }
 
-    const buffer = await createPdfFromText(content, {
-      type: type === 'shopping-list' ? 'shoppingList' : (type === 'recipes' ? 'recipes' : undefined)
-    });
-
+    const buffer = await createPdfFromText(content, { type });
     const url = await uploadPdfToS3(buffer, filename);
     res.json({ url });
   } catch (err) {
     console.error('[PDF ERROR]', err);
-    res.status(404).json({ error: 'PDF or session not found.' });
+    res.status(500).json({ error: 'Failed to generate PDF.' });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+async function generateMealPlan(data) {
+  const {
+    duration = 7,
+    startDay = 'Monday',
+    meals = ['Supper'],
+    dietType = 'Any',
+    dietaryPreferences = 'None',
+    mealStyle = 'Any',
+    cookingRequests = 'None',
+    appliances = [],
+    onHandIngredients = 'None',
+    calendarInsights = 'None',
+    people = 4,
+    name = 'Guest'
+  } = data;
+
+  const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}.\nUser Info:\n- Diet Type: ${dietType}\n- Preferences: ${dietaryPreferences}\n- Cooking Style: ${mealStyle}\n- Special Requests: ${cookingRequests}\n- Appliances: ${appliances.join(', ') || 'None'}\n- On-hand Ingredients: ${onHandIngredients}\n- Household size: ${people}\n- Calendar Insights: ${calendarInsights || 'None'}\n\nInstructions:\n- Use ${startDay} as the first day\n- Do NOT include any meal type not explicitly listed above\n- End with a shopping list grouped by category and subtract on-hand items\n- Include a JSON array of all meals with day, meal type, and title (for recipe lookup)`;
+
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [
+      { role: 'system', content: 'You are a professional meal planner.' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.7,
+    max_tokens: 3000
+  });
+
+  const result = completion.choices?.[0]?.message?.content || '';
+  const jsonMatch = result.match(/\[.*\]/s);
+  let recipeInfoList = [];
+  if (jsonMatch) {
+    try {
+      recipeInfoList = JSON.parse(jsonMatch[0]);
+    } catch (e) {
+      console.error('[JSON PARSE ERROR]', e);
+    }
+  }
+
+  const [mealPlanPart, shoppingListPart] = result.split(/(?=Shopping List)/i);
+
+  return {
+    mealPlan: stripFormatting(mealPlanPart?.trim() || ''),
+    shoppingList: stripFormatting(shoppingListPart?.trim() || ''),
+    recipeInfoList
+  };
+}
+
+async function generateRecipesParallel(data, recipeInfoList) {
+  if (!recipeInfoList.length) return '**No recipes could be generated based on the current meal plan.**';
+  const { people = 4 } = data;
+
+  const tasks = recipeInfoList.map(({ day, meal, title }) => {
+    const prompt = `You are a professional recipe writer. Create a recipe with the following format.\n\n**Meal Name:** ${day} ${meal} – ${title}\n**Ingredients:**\n- list each ingredient with quantity for ${people} people\n**Instructions:**\n1. step-by-step instructions\n**Prep Time:** X minutes\n**Macros:** Protein, Fat, Carbs`;
+
+    return openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        { role: 'system', content: 'You are a professional recipe writer.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 1000
+    }).then(c => c.choices?.[0]?.message?.content?.trim() || '');
+  });
+
+  const outputs = await Promise.all(tasks);
+  return outputs.join('\n\n---\n\n');
+}
