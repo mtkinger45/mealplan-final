@@ -12,14 +12,11 @@ const s3 = new S3Client({
 });
 
 export async function createPdfFromText(text, options = {}) {
-  console.log('[createPdfFromText] Generating PDF for content...');
   const doc = new PDFDocument({ margin: 40, size: 'LETTER' });
   const buffers = [];
 
   doc.on('data', buffers.push.bind(buffers));
-  doc.on('end', () => {
-    console.log('[createPdfFromText] PDF generation complete.');
-  });
+  doc.on('end', () => console.log('[PDF] PDF generation complete.'));
 
   const safePageBreak = () => {
     if (doc.y > doc.page.height - doc.page.margins.bottom - 100) {
@@ -27,95 +24,77 @@ export async function createPdfFromText(text, options = {}) {
     }
   };
 
-  if (options.type === 'shoppingList') {
-    const sections = text.split(/(?=^[A-Za-z ]+:)/m).filter(s => !s.includes('JSON List') && !s.includes('['));
-    sections.forEach(section => {
-      const lines = section.trim().split('\n');
-      const heading = lines[0].trim().replace(/:$/, '');
-      doc.moveDown(1);
-      doc.font('Helvetica-Bold').fontSize(13).text(heading);
-      doc.moveDown(0.3);
-
-      lines.slice(1).forEach(item => {
-        safePageBreak();
-        const cleanedItem = item.trim()
-          .replace(/^[-–•]\s*/, '')
-          .replace(/^([\d.]+)\s+(\w+)\s+(.*)/, '$1 $3 $2')
-          .replace(/^([a-zA-Z]+):\s*(\d+)$/, '$2 $1');
-
-        if (cleanedItem) {
-          doc.font('Helvetica').fontSize(12).text(`• ${cleanedItem}`);
-        }
-      });
-      doc.moveDown(1.5);
-    });
-  } else if (options.type === 'recipes') {
+  if (options.type === 'shopping-list') {
     const lines = text.split('\n');
     let currentSection = '';
 
-    lines.forEach((line, idx) => {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        doc.moveDown(1);
-        return;
-      }
-      safePageBreak();
+    for (let line of lines) {
+      line = line.trim();
+      if (!line) continue;
 
-      if (/^\*\*Meal Name:\*\*/.test(trimmed)) {
-        if (idx !== 0) doc.addPage();
-        doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
-      } else if (/^\*\*Ingredients:\*\*/.test(trimmed)) {
+      // Skip JSON array section
+      if (line.toLowerCase().startsWith('json array') || line.startsWith('[') || line.startsWith('{')) break;
+
+      if (/^(Produce|Meat|Dairy|Fish|Fats|Fruit):?$/i.test(line)) {
+        currentSection = line.replace(/:$/, '');
+        doc.moveDown(1);
+        doc.font('Helvetica-Bold').fontSize(13).text(currentSection);
         doc.moveDown(0.3);
-        doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
-        currentSection = 'ingredients';
-      } else if (/^\*\*Instructions:\*\*/.test(trimmed)) {
-        doc.moveDown(0.3);
-        doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
-        currentSection = 'instructions';
-      } else if (/^\*\*Prep Time:\*\*/.test(trimmed)) {
-        doc.moveDown(0.3);
-        doc.font('Helvetica').fontSize(12).text(trimmed.replace(/^\*\*/, '').replace(/\*\*$/, ''));
-        currentSection = '';
-      } else if (/^\*\*Macros:\*\*/.test(trimmed)) {
-        doc.font('Helvetica').fontSize(12).text(trimmed.replace(/^\*\*/, '').replace(/\*\*$/, ''));
-        currentSection = '';
+      } else if (/^(Shopping List)/i.test(line)) {
+        doc.font('Helvetica-Bold').fontSize(15).text(line);
       } else {
-        if (currentSection === 'ingredients') {
-          doc.font('Helvetica').fontSize(12).text(`- ${trimmed}`);
-        } else if (currentSection === 'instructions') {
-          doc.font('Helvetica').fontSize(12).text(trimmed);
-        } else {
-          doc.font('Helvetica').fontSize(12).text(trimmed);
-        }
+        safePageBreak();
+        doc.font('Helvetica').fontSize(12).text(`• ${line}`);
       }
-    });
-  } else {
+    }
+  }
+
+  else if (options.type === 'recipes') {
+    if (!text || text.trim().length === 0 || /no recipes/i.test(text)) {
+      doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
+    } else {
+      const recipes = text.split(/---/);
+      recipes.forEach((recipe, i) => {
+        const lines = recipe.trim().split('\n');
+        if (i > 0) doc.addPage();
+        lines.forEach(line => {
+          safePageBreak();
+          if (/^\*\*.*\*\*$/.test(line)) {
+            doc.moveDown(0.5);
+            doc.font('Helvetica-Bold').fontSize(13).text(line.replace(/\*\*/g, ''));
+          } else if (/^\d+\.\s+/.test(line)) {
+            doc.font('Helvetica').fontSize(12).text(line);
+          } else if (/^-/i.test(line)) {
+            doc.font('Helvetica').fontSize(12).text(line);
+          } else {
+            doc.font('Helvetica').fontSize(12).text(line);
+          }
+        });
+      });
+    }
+  }
+
+  else {
     const lines = text.split('\n');
-    lines.forEach((line, idx) => {
+    lines.forEach((line, i) => {
       safePageBreak();
-      const trimmed = line.trim();
-      if (/^Meal Plan for /i.test(trimmed)) {
-        doc.font('Helvetica-Bold').fontSize(14).text(trimmed);
-      } else if (/^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)/.test(trimmed)) {
-        doc.moveDown(0.5);
-        doc.font('Helvetica-Bold').fontSize(12).text(trimmed);
+      if (/^Meal Plan for /i.test(line)) {
+        doc.font('Helvetica-Bold').fontSize(14).text(line);
       } else {
-        doc.font('Helvetica').fontSize(12).text(trimmed);
+        doc.font('Helvetica').fontSize(12).text(line);
       }
-      if (idx < lines.length - 1) doc.moveDown(0.5);
+      if (i < lines.length - 1) doc.moveDown(0.3);
     });
   }
 
   doc.end();
   return new Promise(resolve => {
-    doc.on('end', () => {
-      const pdfBuffer = Buffer.concat(buffers);
-      resolve(pdfBuffer);
-    });
+    doc.on('end', () => resolve(Buffer.concat(buffers)));
   });
 }
 
 export async function uploadPdfToS3(buffer, filename) {
+  console.log(`[uploadPdfToS3] Uploading ${filename} to S3...`);
   const bucketName = process.env.AWS_BUCKET_NAME;
   const uploadCommand = new PutObjectCommand({
     Bucket: bucketName,
