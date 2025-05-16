@@ -29,16 +29,16 @@ export async function createPdfFromText(text, options = {}) {
     lines.forEach((line, index) => {
       const trimmed = line.trim();
 
-      if (/\*\*Meal Name:\*\*/i.test(trimmed)) {
+      if (trimmed.startsWith('**Meal Name:**')) {
         if (index !== 0) doc.addPage();
-        doc.font('Helvetica-Bold').fontSize(14).text(trimmed.replace(/\*\*/g, ''));
-      } else if (/\*\*Ingredients:\*\*/i.test(trimmed)) {
+        doc.font('Helvetica-Bold').fontSize(14).text(trimmed.replace('**Meal Name:**', '').trim());
+      } else if (trimmed.startsWith('**Ingredients:**')) {
         doc.moveDown(0.5);
         doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
-      } else if (/\*\*Instructions:\*\*/i.test(trimmed)) {
+      } else if (trimmed.startsWith('**Instructions:**')) {
         doc.moveDown(0.5);
         doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
-      } else if (/\*\*Prep Time:\*\*/i.test(trimmed) || /\*\*Macros:\*\*/i.test(trimmed)) {
+      } else if (trimmed.startsWith('**Prep Time:**') || trimmed.startsWith('**Macros:**')) {
         doc.moveDown(0.5);
         doc.font('Helvetica').fontSize(12).text(trimmed.replace(/\*\*/g, ''));
       } else if (/^\d+\./.test(trimmed)) {
@@ -77,7 +77,6 @@ export async function createPdfFromText(text, options = {}) {
 
     const sectionKeys = Object.keys(organizedSections);
     if (sectionKeys.length === 0) {
-      // fallback if nothing matched regex
       doc.font('Helvetica').fontSize(12).text(text);
     } else {
       sectionKeys.forEach(section => {
