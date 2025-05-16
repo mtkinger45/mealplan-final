@@ -27,20 +27,26 @@ app.use(cors({
 
 app.use(bodyParser.json({ limit: '5mb' }));
 
-function weekdaySequence(startDay, duration) {
-  const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  const startIndex = weekdays.indexOf(startDay);
-  return Array.from({ length: duration }, (_, i) => weekdays[(startIndex + i) % 7]);
-}
-
-function extractRelevantInsights(calendarInsights, startDay, duration) {
-  const days = weekdaySequence(startDay, duration);
-  const insights = calendarInsights.split(/[,]/).map(s => s.trim()).filter(Boolean);
-  return insights.filter(line => days.some(day => line.toLowerCase().includes(day.toLowerCase()))).join(', ');
-}
-
 function stripFormatting(text) {
   return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*/g, '');
+}
+
+function parseIngredients(text) {
+  const ingredientLines = text.match(/^\*\*Ingredients:\*\*[\s\S]*?(?=\*\*|$)/gm) || [];
+  return ingredientLines.flatMap(section => section.split('\n').slice(1).map(line => line.replace(/^[-•]\s*/, '').trim()));
+}
+
+function categorizeIngredient(ingredient) {
+  const lower = ingredient.toLowerCase();
+  if (/beef|ribeye|sirloin|steak|ground/.test(lower)) return 'Meat';
+  if (/chicken|thigh|breast|drumstick/.test(lower)) return 'Meat';
+  if (/pork|bacon|sausage/.test(lower)) return 'Meat';
+  if (/fish|salmon|tilapia|cod/.test(lower)) return 'Meat';
+  if (/egg/.test(lower)) return 'Dairy';
+  if (/milk|cream|cheese/.test(lower)) return 'Dairy';
+  if (/lettuce|spinach|zucchini|broccoli|onion|pepper|cucumber|radish|mushroom|cauliflower|tomato|peas|green beans/.test(lower)) return 'Produce';
+  if (/butter|ghee|oil|olive/.test(lower)) return 'Pantry';
+  return 'Other';
 }
 
 app.post('/api/mealplan', async (req, res) => {
@@ -50,15 +56,38 @@ app.post('/api/mealplan', async (req, res) => {
     const { mealPlan, shoppingList, recipeInfoList } = await generateMealPlanData(data);
     const recipes = await generateRecipesParallel(data, recipeInfoList);
 
+    // Extract and organize ingredients
+    const rawIngredients = parseIngredients(recipes);
+    const onHandItems = data.onHandIngredients?.toLowerCase().split(/\n|,/) || [];
+    const categorized = {};
+
+    rawIngredients.forEach(item => {
+      const category = categorizeIngredient(item);
+      if (!categorized[category]) categorized[category] = [];
+      const owned = onHandItems.some(own => item.toLowerCase().includes(own.trim()));
+      const label = owned ? `${item} (on-hand)` : item;
+      if (!categorized[category].includes(label)) categorized[category].push(label);
+    });
+
+    let formattedShoppingList = '';
+    for (const [category, items] of Object.entries(categorized)) {
+      formattedShoppingList += `${category}:
+`;
+      items.forEach(i => {
+        formattedShoppingList += `• ${i}\n`;
+      });
+      formattedShoppingList += '\n';
+    }
+
     await fs.mkdir(CACHE_DIR, { recursive: true });
     await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify({
       name: data.name || 'Guest',
       mealPlan,
-      shoppingList,
+      shoppingList: formattedShoppingList.trim(),
       recipes
     }, null, 2));
 
-    res.json({ sessionId, mealPlan, shoppingList, recipes });
+    res.json({ sessionId, mealPlan, shoppingList: formattedShoppingList.trim(), recipes });
   } catch (err) {
     console.error('[API ERROR]', err);
     res.status(500).json({ error: 'Meal plan generation failed.' });
@@ -97,9 +126,7 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
 async function generateMealPlanData(data) {
   const {
