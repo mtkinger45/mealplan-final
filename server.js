@@ -51,26 +51,39 @@ function parseIngredientsFromRecipes(text) {
   return ingredients;
 }
 
-function categorizeIngredient(ingredient) {
-  if (/beef|ribeye|sirloin|steak|ground/.test(ingredient)) return 'Meat';
-  if (/chicken|thigh|breast|drumstick/.test(ingredient)) return 'Meat';
-  if (/pork|bacon|sausage/.test(ingredient)) return 'Meat';
-  if (/fish|salmon|tilapia|cod|shrimp/.test(ingredient)) return 'Meat';
-  if (/egg/.test(ingredient)) return 'Dairy';
-  if (/milk|cream|cheese/.test(ingredient)) return 'Dairy';
-  if (/lettuce|spinach|zucchini|broccoli|onion|pepper|cucumber|radish|mushroom|cauliflower|tomato|peas|green beans|asparagus|cabbage/.test(ingredient)) return 'Produce';
-  if (/butter|ghee|oil|olive/.test(ingredient)) return 'Pantry';
-  if (/lemon|lime|avocado|olive/.test(ingredient)) return 'Fruit';
-  return 'Other';
+function normalizeIngredient(ingredient) {
+  const base = ingredient
+    .replace(/\(.*?\)/g, '')
+    .replace(/\d+(\.\d+)?\s?(cups?|oz|tablespoons?|teaspoons?|cloves?|bunches?|heads?|slices?|pieces?|lbs?|grams?|kg|containers?|cans?|packs?)/g, '')
+    .replace(/[^a-zA-Z\s]/g, '')
+    .replace(/\b(?:fresh|large|medium|small|chopped|diced|minced|sliced|to taste|optional)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return base;
 }
 
 function condenseIngredients(ingredientList) {
-  const map = new Map();
+  const tally = {};
   for (const item of ingredientList) {
-    const key = item.replace(/[^a-zA-Z\s]/g, '').replace(/\s+/g, ' ').trim();
-    map.set(key, item);
+    const base = normalizeIngredient(item);
+    if (!tally[base]) tally[base] = 0;
+    tally[base] += 1;
   }
-  return Array.from(map.values());
+  return Object.entries(tally).map(([name, qty]) => `${name.charAt(0).toUpperCase() + name.slice(1)}: ${qty}`);
+}
+
+function categorizeIngredient(ingredient) {
+  const i = ingredient.toLowerCase();
+  if (/beef|ribeye|sirloin|steak|ground/.test(i)) return 'Meat';
+  if (/chicken|thigh|breast|drumstick/.test(i)) return 'Meat';
+  if (/pork|bacon|sausage/.test(i)) return 'Meat';
+  if (/fish|salmon|tilapia|cod|shrimp/.test(i)) return 'Meat';
+  if (/egg/.test(i)) return 'Dairy';
+  if (/milk|cream|cheese/.test(i)) return 'Dairy';
+  if (/lettuce|spinach|zucchini|broccoli|onion|pepper|cucumber|radish|mushroom|cauliflower|tomato|peas|green beans|asparagus|cabbage/.test(i)) return 'Produce';
+  if (/butter|ghee|oil|olive/.test(i)) return 'Pantry';
+  if (/lemon|lime|avocado|olive/.test(i)) return 'Fruit';
+  return 'Other';
 }
 
 app.post('/api/mealplan', async (req, res) => {
@@ -88,7 +101,7 @@ app.post('/api/mealplan', async (req, res) => {
     condensedIngredients.forEach(item => {
       const cat = categorizeIngredient(item);
       if (!categorized[cat]) categorized[cat] = [];
-      const owned = onHand.some(own => item.includes(own.trim()));
+      const owned = onHand.some(own => item.toLowerCase().includes(own.trim()));
       const label = owned ? `${item} (on-hand)` : item;
       if (!categorized[cat].includes(label)) categorized[cat].push(label);
     });
