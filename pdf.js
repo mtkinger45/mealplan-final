@@ -62,7 +62,7 @@ export async function createPdfFromText(text, options = {}) {
           safePageBreak();
           if (/^\*\*Meal \d+ Name:/i.test(line)) {
             doc.moveDown(0.5);
-            doc.font('Helvetica-Bold').fontSize(13).text(line.replace(/^\*\*/, '').replace(/\*\*$/, ''));
+            doc.font('Helvetica-Bold').fontSize(14).text(line.replace(/^\*\*/, '').replace(/\*\*$/, ''));
           } else if (/^\*\*Ingredients:/i.test(line)) {
             doc.moveDown(0.5);
             doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
