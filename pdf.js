@@ -25,18 +25,12 @@ export async function createPdfFromText(text, options = {}) {
   };
 
   if (options.type === 'recipes') {
-    const lines = text.split('\n');
-    lines.forEach(line => {
+    const lines = text.split('\n').filter(Boolean);
+    lines.forEach((line, index) => {
       const trimmed = line.trim();
-      if (!trimmed) {
-        doc.moveDown();
-        return;
-      }
-
-      safePageBreak(doc);
 
       if (/\*\*Meal Name:\*\*/i.test(trimmed)) {
-        doc.addPage();
+        if (index !== 0) doc.addPage();
         doc.font('Helvetica-Bold').fontSize(14).text(trimmed.replace(/\*\*/g, ''));
       } else if (/\*\*Ingredients:\*\*/i.test(trimmed)) {
         doc.moveDown(0.5);
@@ -57,18 +51,32 @@ export async function createPdfFromText(text, options = {}) {
     });
   } else if (options.type === 'shopping-list') {
     const sections = text.split(/(?=^[A-Z][a-z]+:)/m);
+    const onHandItems = [];
+
     sections.forEach(section => {
       const lines = section.trim().split('\n');
       const heading = lines[0].trim().replace(/:$/, '');
+
       doc.moveDown();
       doc.font('Helvetica-Bold').fontSize(13).text(heading);
+
       lines.slice(1).forEach(line => {
         const cleaned = line.trim().replace(/^[-•\u2022]\s*/, '');
-        if (cleaned) {
+        if (/on-hand/i.test(heading)) {
+          onHandItems.push(cleaned);
+        } else if (cleaned) {
           doc.font('Helvetica').fontSize(12).text(`• ${cleaned}`);
         }
       });
     });
+
+    if (onHandItems.length) {
+      doc.moveDown();
+      doc.font('Helvetica-Bold').fontSize(13).text('On-Hand Ingredients Used:');
+      onHandItems.forEach(item => {
+        doc.font('Helvetica').fontSize(12).text(`• ${item}`);
+      });
+    }
   } else {
     const lines = text.split('\n');
     lines.forEach(line => {
