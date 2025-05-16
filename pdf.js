@@ -25,27 +25,30 @@ export async function createPdfFromText(text, options = {}) {
   };
 
   if (options.type === 'shopping-list') {
-    const lines = text.split('\n');
-    let currentSection = '';
+    const lines = text.split(/\n+/);
+    let currentCategory = '';
+
+    doc.font('Helvetica-Bold').fontSize(16).text('Shopping List:', { underline: false });
+    doc.moveDown(1);
 
     for (let line of lines) {
       line = line.trim();
-      if (!line) continue;
+      if (!line || line.toLowerCase().includes('json') || line.startsWith('[') || line.startsWith('{')) continue;
 
-      // Skip JSON array section
-      if (line.toLowerCase().includes('json') || line.startsWith('[') || line.startsWith('{')) break;
+      const match = line.match(/^•\s*(\w+):\s*(.+)/);
+      if (match) {
+        const [_, category, items] = match;
+        currentCategory = category.charAt(0).toUpperCase() + category.slice(1);
+        doc.font('Helvetica-Bold').fontSize(13).text(currentCategory);
+        doc.moveDown(0.2);
 
-      if (/^(Produce|Meat|Dairy|Fish|Fats|Fruit|Vegetables|Misc|Eggs):?$/i.test(line)) {
-        currentSection = line.replace(/:$/, '');
-        doc.moveDown(1);
-        doc.font('Helvetica-Bold').fontSize(13).text(currentSection);
-        doc.moveDown(0.3);
-      } else if (/^(Shopping List)/i.test(line)) {
-        doc.font('Helvetica-Bold').fontSize(15).text(line);
-      } else {
-        safePageBreak();
-        const cleaned = line.replace(/^[-•]\s*/, '').replace(/^\s*-\s*/, '').trim();
-        doc.font('Helvetica').fontSize(12).text(`• ${cleaned}`);
+        const itemList = items.split(',').map(i => i.trim()).filter(Boolean);
+        itemList.forEach(item => {
+          safePageBreak();
+          doc.font('Helvetica').fontSize(12).text(`• ${item}`);
+        });
+
+        doc.moveDown(0.5);
       }
     }
   }
@@ -60,21 +63,21 @@ export async function createPdfFromText(text, options = {}) {
         if (i > 0) doc.addPage();
         lines.forEach(line => {
           safePageBreak();
-          if (/^\*\*Meal \d+ Name:/i.test(line)) {
+          if (/^\*\*Meal Name:\*\*/i.test(line)) {
             doc.moveDown(0.5);
-            doc.font('Helvetica-Bold').fontSize(14).text(line.replace(/^\*\*/, '').replace(/\*\*$/, ''));
-          } else if (/^\*\*Ingredients:/i.test(line)) {
+            doc.font('Helvetica-Bold').fontSize(14).text(line.replace(/^\*\*Meal Name:\*\*/i, '').trim());
+          } else if (/^\*\*Ingredients:\*\*/i.test(line)) {
             doc.moveDown(0.5);
             doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
-          } else if (/^\*\*Instructions:/i.test(line)) {
+          } else if (/^\*\*Instructions:\*\*/i.test(line)) {
             doc.moveDown(0.5);
             doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
-          } else if (/^\*\*Prep.*Time:/i.test(line)) {
+          } else if (/^\*\*Prep.*Time:\*\*/i.test(line)) {
             doc.moveDown(0.3);
             doc.font('Helvetica').fontSize(12).text(line.replace(/^\*\*/, ''));
-          } else if (/^\*\*Macros:/i.test(line)) {
+          } else if (/^\*\*Macros:\*\*/i.test(line)) {
             doc.moveDown(0.3);
-            doc.font('Helvetica').fontSize(12).text(line.replace(/^\*\*/, ''));
+            doc.font('Helvetica-Bold').fontSize(12).text('Macros:');
           } else if (/^\d+\.\s+/.test(line)) {
             doc.font('Helvetica').fontSize(12).text(line);
           } else if (/^[-•]\s+/.test(line)) {
