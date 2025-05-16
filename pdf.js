@@ -50,33 +50,38 @@ export async function createPdfFromText(text, options = {}) {
       }
     });
   } else if (options.type === 'shopping-list') {
-    const sections = text.split(/(?=^[A-Z][a-z]+:)/m);
-    const onHandItems = [];
+    const sectionRegex = /^(Produce|Meat|Dairy|Pantry|Frozen|Bakery|Spices|Other|On-Hand Ingredients Used):/i;
+    const lines = text.split('\n');
+    let currentSection = '';
+    let sectionItems = [];
+    const organizedSections = {};
 
-    sections.forEach(section => {
-      const lines = section.trim().split('\n');
-      const heading = lines[0].trim().replace(/:$/, '');
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
 
-      doc.moveDown();
-      doc.font('Helvetica-Bold').fontSize(13).text(heading);
-
-      lines.slice(1).forEach(line => {
-        const cleaned = line.trim().replace(/^[-•\u2022]\s*/, '');
-        if (/on-hand/i.test(heading)) {
-          onHandItems.push(cleaned);
-        } else if (cleaned) {
-          doc.font('Helvetica').fontSize(12).text(`• ${cleaned}`);
+      if (sectionRegex.test(trimmed)) {
+        if (currentSection && sectionItems.length) {
+          organizedSections[currentSection] = [...(organizedSections[currentSection] || []), ...sectionItems];
         }
-      });
+        currentSection = trimmed.replace(/:$/, '');
+        sectionItems = [];
+      } else {
+        sectionItems.push(trimmed.replace(/^[-•\u2022]\s*/, ''));
+      }
     });
 
-    if (onHandItems.length) {
+    if (currentSection && sectionItems.length) {
+      organizedSections[currentSection] = [...(organizedSections[currentSection] || []), ...sectionItems];
+    }
+
+    Object.entries(organizedSections).forEach(([section, items]) => {
       doc.moveDown();
-      doc.font('Helvetica-Bold').fontSize(13).text('On-Hand Ingredients Used:');
-      onHandItems.forEach(item => {
+      doc.font('Helvetica-Bold').fontSize(13).text(section);
+      items.forEach(item => {
         doc.font('Helvetica').fontSize(12).text(`• ${item}`);
       });
-    }
+    });
   } else {
     const lines = text.split('\n');
     lines.forEach(line => {
