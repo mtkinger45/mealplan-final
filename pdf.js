@@ -35,7 +35,7 @@ export async function createPdfFromText(text, options = {}) {
       line = line.trim();
       if (!line || line.toLowerCase().includes('json') || line.startsWith('[') || line.startsWith('{')) continue;
 
-      const match = line.match(/^•\s*(\w+):\s*(.+)/);
+      const match = line.match(/^\u2022\s*(\w+):\s*(.+)/);
       if (match) {
         const [_, category, items] = match;
         currentCategory = category.charAt(0).toUpperCase() + category.slice(1);
