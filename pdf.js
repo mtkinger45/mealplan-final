@@ -28,7 +28,7 @@ export async function createPdfFromText(text, options = {}) {
   };
 
   if (options.type === 'shoppingList') {
-    const sections = text.split(/(?=^[A-Za-z ]+:)/m);
+    const sections = text.split(/(?=^[A-Za-z ]+:)/m).filter(s => !s.includes('JSON List') && !s.includes('['));
     sections.forEach(section => {
       const lines = section.trim().split('\n');
       const heading = lines[0].trim().replace(/:$/, '');
