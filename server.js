@@ -52,14 +52,13 @@ function parseIngredientsFromRecipes(text) {
 }
 
 function normalizeIngredient(ingredient) {
-  const base = ingredient
+  return ingredient
     .replace(/\(.*?\)/g, '')
     .replace(/\d+(\.\d+)?\s?(cups?|oz|tablespoons?|teaspoons?|cloves?|bunches?|heads?|slices?|pieces?|lbs?|grams?|kg|containers?|cans?|packs?)/g, '')
     .replace(/[^a-zA-Z\s]/g, '')
     .replace(/\b(?:fresh|large|medium|small|chopped|diced|minced|sliced|to taste|optional)\b/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-  return base;
 }
 
 function condenseIngredients(ingredientList) {
@@ -163,101 +162,3 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-
-async function generateMealPlanData(data) {
-  const {
-    duration = 7,
-    startDay = 'Monday',
-    meals = ['Supper'],
-    dietType = 'Any',
-    dietaryPreferences = 'None',
-    mealStyle = 'Any',
-    cookingRequests = 'None',
-    appliances = [],
-    onHandIngredients = 'None',
-    calendarInsights = 'None',
-    feedback = '',
-    people = 4,
-    name = 'Guest'
-  } = data;
-
-  const cleanedInsights = extractRelevantInsights(calendarInsights, startDay, duration);
-  const feedbackText = feedback ? `NOTE: The user has requested this revision: "${feedback}".` : '';
-
-  const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}.\nDo not include any other meals (e.g., skip Supper if it's not listed).
-User Info:
-- Diet Type: ${dietType}
-- Preferences: ${dietaryPreferences}
-- Cooking Style: ${mealStyle}
-- Special Requests: ${cookingRequests}
-- Appliances: ${appliances.join(', ') || 'None'}
-- On-hand Ingredients: ${onHandIngredients}
-- Household size: ${people}
-- Calendar Insights: ${cleanedInsights || 'None'}
-${feedbackText}
-
-Instructions:
-- Use ${startDay} as the first day and follow correct weekday order
-- Add a note next to the day name if calendar insights are relevant (e.g., Monday – Baseball night)
-- Do NOT use "Day 1", use weekday names only
-- Meals should be simple, realistic, and vary throughout the week
-- Omit detailed ingredients and instructions in this view
-- End with a shopping list labeled "Shopping List:" that combines all ingredients and subtracts on-hand items.
-- Calculate total ingredient quantities based on household size
-- Use U.S. measurements (e.g., cups, oz, lbs)
-- Group shopping list items by category (Produce, Meat, Dairy, etc.)
-- Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities
-- Include "JSON Meals:" followed by a JSON array of all meals with day, meal type, and title (for recipe lookup)`;
-
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4',
-    messages: [
-      { role: 'system', content: 'You are a professional meal planner.' },
-      { role: 'user', content: prompt }
-    ],
-    temperature: 0.7,
-    max_tokens: 3000
-  });
-
-  const result = completion.choices?.[0]?.message?.content || '';
-  const [mealPlanPart, shoppingListBlock] = result.split(/Shopping List:/i);
-  const [shoppingListPart] = shoppingListBlock?.split(/JSON Meals:/i) || [''];
-
-  const jsonMatch = result.match(/\[.*\]/s);
-  let recipeInfoList = [];
-  if (jsonMatch) {
-    try {
-      recipeInfoList = JSON.parse(jsonMatch[0]);
-    } catch (e) {
-      console.error('[JSON PARSE ERROR]', e);
-    }
-  }
-
-  return {
-    mealPlan: stripFormatting(mealPlanPart?.trim() || ''),
-    shoppingList: stripFormatting(shoppingListPart?.trim() || ''),
-    recipeInfoList
-  };
-}
-
-async function generateRecipesParallel(data, recipeInfoList) {
-  if (!recipeInfoList.length) return '**No recipes could be generated based on the current meal plan.**';
-  const { people = 4 } = data;
-
-  const tasks = recipeInfoList.map(({ day, meal, title }) => {
-    const prompt = `You are a professional recipe writer. Create a recipe with the following format.\n\n**Meal Name:** ${day} ${meal} – ${title}\n**Ingredients:**\n- list each ingredient with quantity for ${people} people\n**Instructions:**\n1. step-by-step instructions\n**Prep Time:** X minutes\n**Macros:** Protein, Fat, Carbs`;
-
-    return openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [
-        { role: 'system', content: 'You are a professional recipe writer.' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.7,
-      max_tokens: 1000
-    }).then(c => c.choices?.[0]?.message?.content?.trim() || '');
-  });
-
-  const outputs = await Promise.all(tasks);
-  return outputs.join('\n\n---\n\n');
-}
