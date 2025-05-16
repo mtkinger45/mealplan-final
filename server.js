@@ -13,18 +13,41 @@ const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CACHE_DIR = './cache';
 
-app.use(cors({ origin: true }));
+const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS not allowed from this origin'));
+    }
+  },
+  credentials: true
+}));
+
 app.use(bodyParser.json({ limit: '5mb' }));
 
+function weekdaySequence(startDay, duration) {
+  const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const startIndex = weekdays.indexOf(startDay);
+  return Array.from({ length: duration }, (_, i) => weekdays[(startIndex + i) % 7]);
+}
+
+function extractRelevantInsights(calendarInsights, startDay, duration) {
+  const days = weekdaySequence(startDay, duration);
+  const insights = calendarInsights.split(/[,]/).map(s => s.trim()).filter(Boolean);
+  return insights.filter(line => days.some(day => line.toLowerCase().includes(day.toLowerCase()))).join(', ');
+}
+
 function stripFormatting(text) {
-  return text.replace(/<[^>]*>/g, '').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*/g, '');
+  return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*/g, '');
 }
 
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
     const sessionId = randomUUID();
-    const { mealPlan, shoppingList, recipeInfoList } = await generateMealPlan(data);
+    const { mealPlan, shoppingList, recipeInfoList } = await generateMealPlanData(data);
     const recipes = await generateRecipesParallel(data, recipeInfoList);
 
     await fs.mkdir(CACHE_DIR, { recursive: true });
@@ -74,9 +97,11 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
 
-async function generateMealPlan(data) {
+async function generateMealPlanData(data) {
   const {
     duration = 7,
     startDay = 'Monday',
@@ -88,11 +113,38 @@ async function generateMealPlan(data) {
     appliances = [],
     onHandIngredients = 'None',
     calendarInsights = 'None',
+    feedback = '',
     people = 4,
     name = 'Guest'
   } = data;
 
-  const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}.\nUser Info:\n- Diet Type: ${dietType}\n- Preferences: ${dietaryPreferences}\n- Cooking Style: ${mealStyle}\n- Special Requests: ${cookingRequests}\n- Appliances: ${appliances.join(', ') || 'None'}\n- On-hand Ingredients: ${onHandIngredients}\n- Household size: ${people}\n- Calendar Insights: ${calendarInsights || 'None'}\n\nInstructions:\n- Use ${startDay} as the first day\n- Do NOT include any meal type not explicitly listed above\n- End with a shopping list grouped by category and subtract on-hand items\n- Include a JSON array of all meals with day, meal type, and title (for recipe lookup)`;
+  const cleanedInsights = extractRelevantInsights(calendarInsights, startDay, duration);
+  const feedbackText = feedback ? `NOTE: The user has requested this revision: "${feedback}".` : '';
+
+  const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}.\nDo not include any other meals (e.g., skip Supper if it's not listed).
+User Info:
+- Diet Type: ${dietType}
+- Preferences: ${dietaryPreferences}
+- Cooking Style: ${mealStyle}
+- Special Requests: ${cookingRequests}
+- Appliances: ${appliances.join(', ') || 'None'}
+- On-hand Ingredients: ${onHandIngredients}
+- Household size: ${people}
+- Calendar Insights: ${cleanedInsights || 'None'}
+${feedbackText}
+
+Instructions:
+- Use ${startDay} as the first day and follow correct weekday order
+- Add a note next to the day name if calendar insights are relevant (e.g., Monday – Baseball night)
+- Do NOT use "Day 1", use weekday names only
+- Meals should be simple, realistic, and vary throughout the week
+- Omit detailed ingredients and instructions in this view
+- End with a shopping list that combines all ingredients and subtracts on-hand items.
+- Calculate total ingredient quantities based on household size
+- Use U.S. measurements (e.g., cups, oz, lbs)
+- Group shopping list items by category (Produce, Meat, Dairy, etc.)
+- Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities
+- Include a JSON array of all meals with day, meal type, and title (for recipe lookup)`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
