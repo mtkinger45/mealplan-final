@@ -16,101 +16,82 @@ export async function createPdfFromText(text, options = {}) {
   const buffers = [];
 
   doc.on('data', buffers.push.bind(buffers));
-  doc.on('end', () => console.log('[PDF] PDF generation complete.'));
+  doc.on('end', () => console.log('[PDF] Document rendering complete.'));
 
-  const safePageBreak = () => {
-    if (doc.y > doc.page.height - doc.page.margins.bottom - 100) {
+  const safePageBreak = (doc, threshold = 100) => {
+    if (doc.y > doc.page.height - doc.page.margins.bottom - threshold) {
       doc.addPage();
     }
   };
 
-  if (options.type === 'shopping-list') {
-    const lines = text.split(/\n+/);
-    let currentCategory = '';
-
-    doc.font('Helvetica-Bold').fontSize(16).text('Shopping List:', { underline: false });
-    doc.moveDown(1);
-
-    for (let line of lines) {
-      line = line.trim();
-      if (!line || line.toLowerCase().includes('json') || line.startsWith('[') || line.startsWith('{')) continue;
-
-      const match = line.match(/^\u2022\s*(\w+):\s*(.+)/);
-      if (match) {
-        const [_, category, items] = match;
-        currentCategory = category.charAt(0).toUpperCase() + category.slice(1);
-        doc.font('Helvetica-Bold').fontSize(13).text(currentCategory);
-        doc.moveDown(0.2);
-
-        const itemList = items.split(',').map(i => i.trim()).filter(Boolean);
-        itemList.forEach(item => {
-          safePageBreak();
-          doc.font('Helvetica').fontSize(12).text(`• ${item}`);
-        });
-
-        doc.moveDown(0.5);
-      }
-    }
-  }
-
-  else if (options.type === 'recipes') {
-    if (!text || text.trim().length === 0 || /no recipes/i.test(text)) {
-      doc.font('Helvetica-Bold').fontSize(14).text('⚠️ No recipes found or failed to generate.');
-    } else {
-      const recipes = text.split(/---/);
-      recipes.forEach((recipe, i) => {
-        const lines = recipe.trim().split('\n');
-        if (i > 0) doc.addPage();
-        lines.forEach(line => {
-          safePageBreak();
-          if (/^\*\*Meal Name:\*\*/i.test(line)) {
-            doc.moveDown(0.5);
-            doc.font('Helvetica-Bold').fontSize(14).text(line.replace(/^\*\*Meal Name:\*\*/i, '').trim());
-          } else if (/^\*\*Ingredients:\*\*/i.test(line)) {
-            doc.moveDown(0.5);
-            doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
-          } else if (/^\*\*Instructions:\*\*/i.test(line)) {
-            doc.moveDown(0.5);
-            doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
-          } else if (/^\*\*Prep.*Time:\*\*/i.test(line)) {
-            doc.moveDown(0.3);
-            doc.font('Helvetica').fontSize(12).text(line.replace(/^\*\*/, ''));
-          } else if (/^\*\*Macros:\*\*/i.test(line)) {
-            doc.moveDown(0.3);
-            doc.font('Helvetica-Bold').fontSize(12).text('Macros:');
-          } else if (/^\d+\.\s+/.test(line)) {
-            doc.font('Helvetica').fontSize(12).text(line);
-          } else if (/^[-•]\s+/.test(line)) {
-            doc.font('Helvetica').fontSize(12).text(line);
-          } else {
-            doc.font('Helvetica').fontSize(12).text(line);
-          }
-        });
-      });
-    }
-  }
-
-  else {
+  if (options.type === 'recipes') {
     const lines = text.split('\n');
-    lines.forEach((line, i) => {
-      safePageBreak();
-      if (/^Meal Plan for /i.test(line)) {
-        doc.font('Helvetica-Bold').fontSize(14).text(line);
-      } else {
-        doc.font('Helvetica').fontSize(12).text(line);
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        doc.moveDown();
+        return;
       }
-      if (i < lines.length - 1) doc.moveDown(0.3);
+
+      safePageBreak(doc);
+
+      if (/\*\*Meal Name:\*\*/i.test(trimmed)) {
+        doc.addPage();
+        doc.font('Helvetica-Bold').fontSize(14).text(trimmed.replace(/\*\*/g, ''));
+      } else if (/\*\*Ingredients:\*\*/i.test(trimmed)) {
+        doc.moveDown(0.5);
+        doc.font('Helvetica-Bold').fontSize(12).text('Ingredients:');
+      } else if (/\*\*Instructions:\*\*/i.test(trimmed)) {
+        doc.moveDown(0.5);
+        doc.font('Helvetica-Bold').fontSize(12).text('Instructions:');
+      } else if (/\*\*Prep Time:\*\*/i.test(trimmed) || /\*\*Macros:\*\*/i.test(trimmed)) {
+        doc.moveDown(0.5);
+        doc.font('Helvetica').fontSize(12).text(trimmed.replace(/\*\*/g, ''));
+      } else if (/^\d+\./.test(trimmed)) {
+        doc.font('Helvetica').fontSize(12).text(trimmed);
+      } else if (/^-/.test(trimmed)) {
+        doc.font('Helvetica').fontSize(12).text(trimmed);
+      } else {
+        doc.font('Helvetica').fontSize(12).text(trimmed);
+      }
+    });
+  } else if (options.type === 'shopping-list') {
+    const sections = text.split(/(?=^[A-Z][a-z]+:)/m);
+    sections.forEach(section => {
+      const lines = section.trim().split('\n');
+      const heading = lines[0].trim().replace(/:$/, '');
+      doc.moveDown();
+      doc.font('Helvetica-Bold').fontSize(13).text(heading);
+      lines.slice(1).forEach(line => {
+        const cleaned = line.trim().replace(/^[-•\u2022]\s*/, '');
+        if (cleaned) {
+          doc.font('Helvetica').fontSize(12).text(`• ${cleaned}`);
+        }
+      });
+    });
+  } else {
+    const lines = text.split('\n');
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        doc.moveDown();
+        return;
+      }
+      safePageBreak(doc);
+      doc.font('Helvetica').fontSize(12).text(trimmed);
     });
   }
 
   doc.end();
   return new Promise(resolve => {
-    doc.on('end', () => resolve(Buffer.concat(buffers)));
+    doc.on('end', () => {
+      const pdfBuffer = Buffer.concat(buffers);
+      resolve(pdfBuffer);
+    });
   });
 }
 
 export async function uploadPdfToS3(buffer, filename) {
-  console.log(`[uploadPdfToS3] Uploading ${filename} to S3...`);
   const bucketName = process.env.AWS_BUCKET_NAME;
   const uploadCommand = new PutObjectCommand({
     Bucket: bucketName,
