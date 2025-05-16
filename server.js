@@ -31,9 +31,24 @@ function stripFormatting(text) {
   return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*/g, '');
 }
 
-function parseIngredients(text) {
-  const ingredientLines = text.match(/^\*\*Ingredients:\*\*[\s\S]*?(?=\*\*|$)/gm) || [];
-  return ingredientLines.flatMap(section => section.split('\n').slice(1).map(line => line.replace(/^[-•]\s*/, '').trim()));
+function extractRelevantInsights(insights, startDay, duration) {
+  const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const startIndex = weekdays.indexOf(startDay);
+  const cycle = Array.from({ length: duration }, (_, i) => weekdays[(startIndex + i) % 7]);
+  return insights.split(',').filter(i => cycle.some(day => i.toLowerCase().includes(day.toLowerCase()))).join(', ');
+}
+
+function parseIngredientsFromRecipes(text) {
+  const allIngredients = [];
+  const matches = text.match(/\*\*Ingredients:\*\*[\s\S]*?(?=\*\*Instructions:\*\*|\*\*Prep Time|\*\*Macros|$)/g) || [];
+  for (const block of matches) {
+    const lines = block.split('\n').slice(1);
+    for (const line of lines) {
+      const clean = line.replace(/^[-•]\s*/, '').trim();
+      if (clean) allIngredients.push(clean);
+    }
+  }
+  return allIngredients;
 }
 
 function categorizeIngredient(ingredient) {
@@ -41,10 +56,10 @@ function categorizeIngredient(ingredient) {
   if (/beef|ribeye|sirloin|steak|ground/.test(lower)) return 'Meat';
   if (/chicken|thigh|breast|drumstick/.test(lower)) return 'Meat';
   if (/pork|bacon|sausage/.test(lower)) return 'Meat';
-  if (/fish|salmon|tilapia|cod/.test(lower)) return 'Meat';
+  if (/fish|salmon|tilapia|cod|shrimp/.test(lower)) return 'Meat';
   if (/egg/.test(lower)) return 'Dairy';
   if (/milk|cream|cheese/.test(lower)) return 'Dairy';
-  if (/lettuce|spinach|zucchini|broccoli|onion|pepper|cucumber|radish|mushroom|cauliflower|tomato|peas|green beans/.test(lower)) return 'Produce';
+  if (/lettuce|spinach|zucchini|broccoli|onion|pepper|cucumber|radish|mushroom|cauliflower|tomato|peas|green beans|asparagus/.test(lower)) return 'Produce';
   if (/butter|ghee|oil|olive/.test(lower)) return 'Pantry';
   return 'Other';
 }
@@ -56,38 +71,37 @@ app.post('/api/mealplan', async (req, res) => {
     const { mealPlan, shoppingList, recipeInfoList } = await generateMealPlanData(data);
     const recipes = await generateRecipesParallel(data, recipeInfoList);
 
-    // Extract and organize ingredients
-    const rawIngredients = parseIngredients(recipes);
-    const onHandItems = data.onHandIngredients?.toLowerCase().split(/\n|,/) || [];
+    // Rebuild shopping list from recipes
+    const ingredients = parseIngredientsFromRecipes(recipes);
+    const onHand = data.onHandIngredients?.toLowerCase().split(/\n|,/) || [];
     const categorized = {};
 
-    rawIngredients.forEach(item => {
-      const category = categorizeIngredient(item);
-      if (!categorized[category]) categorized[category] = [];
-      const owned = onHandItems.some(own => item.toLowerCase().includes(own.trim()));
+    ingredients.forEach(item => {
+      const cat = categorizeIngredient(item);
+      if (!categorized[cat]) categorized[cat] = [];
+      const owned = onHand.some(own => item.toLowerCase().includes(own.trim()));
       const label = owned ? `${item} (on-hand)` : item;
-      if (!categorized[category].includes(label)) categorized[category].push(label);
+      if (!categorized[cat].includes(label)) categorized[cat].push(label);
     });
 
-    let formattedShoppingList = '';
+    let rebuiltShoppingList = '';
     for (const [category, items] of Object.entries(categorized)) {
-      formattedShoppingList += `${category}:
-`;
-      items.forEach(i => {
-        formattedShoppingList += `• ${i}\n`;
-      });
-      formattedShoppingList += '\n';
+      rebuiltShoppingList += `${category}:\n`;
+      for (const i of items) {
+        rebuiltShoppingList += `• ${i}\n`;
+      }
+      rebuiltShoppingList += '\n';
     }
 
     await fs.mkdir(CACHE_DIR, { recursive: true });
     await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify({
       name: data.name || 'Guest',
       mealPlan,
-      shoppingList: formattedShoppingList.trim(),
+      shoppingList: rebuiltShoppingList.trim(),
       recipes
     }, null, 2));
 
-    res.json({ sessionId, mealPlan, shoppingList: formattedShoppingList.trim(), recipes });
+    res.json({ sessionId, mealPlan, shoppingList: rebuiltShoppingList.trim(), recipes });
   } catch (err) {
     console.error('[API ERROR]', err);
     res.status(500).json({ error: 'Meal plan generation failed.' });
