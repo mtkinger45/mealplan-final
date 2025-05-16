@@ -139,12 +139,12 @@ Instructions:
 - Do NOT use "Day 1", use weekday names only
 - Meals should be simple, realistic, and vary throughout the week
 - Omit detailed ingredients and instructions in this view
-- End with a shopping list that combines all ingredients and subtracts on-hand items.
+- End with a shopping list labeled "Shopping List:" that combines all ingredients and subtracts on-hand items.
 - Calculate total ingredient quantities based on household size
 - Use U.S. measurements (e.g., cups, oz, lbs)
 - Group shopping list items by category (Produce, Meat, Dairy, etc.)
 - Be specific about meats (e.g., ground beef, chicken thighs, sirloin) and quantities
-- Include a JSON array of all meals with day, meal type, and title (for recipe lookup)`;
+- Include "JSON Meals:" followed by a JSON array of all meals with day, meal type, and title (for recipe lookup)`;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
@@ -157,6 +157,9 @@ Instructions:
   });
 
   const result = completion.choices?.[0]?.message?.content || '';
+  const [mealPlanPart, shoppingListBlock] = result.split(/Shopping List:/i);
+  const [shoppingListPart] = shoppingListBlock?.split(/JSON Meals:/i) || [''];
+
   const jsonMatch = result.match(/\[.*\]/s);
   let recipeInfoList = [];
   if (jsonMatch) {
@@ -166,8 +169,6 @@ Instructions:
       console.error('[JSON PARSE ERROR]', e);
     }
   }
-
-  const [mealPlanPart, shoppingListPart] = result.split(/(?=Shopping List)/i);
 
   return {
     mealPlan: stripFormatting(mealPlanPart?.trim() || ''),
