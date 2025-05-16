@@ -18,7 +18,7 @@ export async function createPdfFromText(text, options = {}) {
   doc.on('data', buffers.push.bind(buffers));
   doc.on('end', () => console.log('[PDF] Document rendering complete.'));
 
-  const safePageBreak = (doc, threshold = 100) => {
+  const safePageBreak = (threshold = 100) => {
     if (doc.y > doc.page.height - doc.page.margins.bottom - threshold) {
       doc.addPage();
     }
@@ -50,7 +50,7 @@ export async function createPdfFromText(text, options = {}) {
       }
     });
   } else if (options.type === 'shopping-list') {
-    const sectionRegex = /^(Produce|Meat|Dairy|Pantry|Frozen|Bakery|Spices|Other|On-Hand Ingredients Used):/i;
+    const sectionRegex = /^(Produce|Meats?|Dairy|Pantry|Frozen|Bakery|Spices|Other|On-?hand Ingredients( Used)?):/i;
     const lines = text.split('\n');
     let currentSection = '';
     let sectionItems = [];
@@ -75,13 +75,19 @@ export async function createPdfFromText(text, options = {}) {
       organizedSections[currentSection] = [...(organizedSections[currentSection] || []), ...sectionItems];
     }
 
-    Object.entries(organizedSections).forEach(([section, items]) => {
-      doc.moveDown();
-      doc.font('Helvetica-Bold').fontSize(13).text(section);
-      items.forEach(item => {
-        doc.font('Helvetica').fontSize(12).text(`• ${item}`);
+    const sectionKeys = Object.keys(organizedSections);
+    if (sectionKeys.length === 0) {
+      // fallback if nothing matched regex
+      doc.font('Helvetica').fontSize(12).text(text);
+    } else {
+      sectionKeys.forEach(section => {
+        doc.moveDown();
+        doc.font('Helvetica-Bold').fontSize(13).text(section);
+        organizedSections[section].forEach(item => {
+          doc.font('Helvetica').fontSize(12).text(`• ${item}`);
+        });
       });
-    });
+    }
   } else {
     const lines = text.split('\n');
     lines.forEach(line => {
@@ -90,7 +96,7 @@ export async function createPdfFromText(text, options = {}) {
         doc.moveDown();
         return;
       }
-      safePageBreak(doc);
+      safePageBreak();
       doc.font('Helvetica').fontSize(12).text(trimmed);
     });
   }
