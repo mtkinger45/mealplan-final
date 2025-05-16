@@ -65,6 +65,7 @@ function condenseIngredients(ingredientList) {
   const tally = {};
   for (const item of ingredientList) {
     const base = normalizeIngredient(item);
+    if (!base) continue;
     if (!tally[base]) tally[base] = 0;
     tally[base] += 1;
   }
@@ -85,13 +86,95 @@ function categorizeIngredient(ingredient) {
   return 'Other';
 }
 
+async function generateMealPlanData(data) {
+  const {
+    duration = 7,
+    startDay = 'Monday',
+    meals = ['Supper'],
+    dietType = 'Any',
+    dietaryPreferences = 'None',
+    mealStyle = 'Any',
+    cookingRequests = 'None',
+    appliances = [],
+    onHandIngredients = 'None',
+    calendarInsights = 'None',
+    people = 4,
+    name = 'Guest'
+  } = data;
+
+  const cleanedInsights = extractRelevantInsights(calendarInsights, startDay, duration);
+  const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}.
+Do not include any other meals (e.g., skip Supper if it's not listed).
+User Info:
+- Diet Type: ${dietType}
+- Preferences: ${dietaryPreferences}
+- Cooking Style: ${mealStyle}
+- Special Requests: ${cookingRequests}
+- Appliances: ${appliances.join(', ') || 'None'}
+- On-hand Ingredients: ${onHandIngredients}
+- Household size: ${people}
+- Calendar Insights: ${cleanedInsights || 'None'}
+
+Instructions:
+- Use ${startDay} as the first day
+- End with a shopping list grouped by category and subtract on-hand items
+- Include a JSON array of all meals with day, meal type, and title (for recipe lookup)`;
+
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [
+      { role: 'system', content: 'You are a professional meal planner.' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.7,
+    max_tokens: 3000
+  });
+
+  const result = completion.choices?.[0]?.message?.content || '';
+  const jsonMatch = result.match(/\[.*\]/s);
+  let recipeInfoList = [];
+  if (jsonMatch) {
+    try {
+      recipeInfoList = JSON.parse(jsonMatch[0]);
+    } catch (e) {
+      console.error('[JSON PARSE ERROR]', e);
+    }
+  }
+
+  const [mealPlanPart, shoppingListPart] = result.split(/(?=Shopping List)/i);
+  return {
+    mealPlan: stripFormatting(mealPlanPart?.trim() || ''),
+    shoppingList: stripFormatting(shoppingListPart?.trim() || ''),
+    recipeInfoList
+  };
+}
+
+async function generateRecipesParallel(data, recipeInfoList) {
+  if (!recipeInfoList.length) return '**No recipes could be generated based on the current meal plan.**';
+  const { people = 4 } = data;
+  const tasks = recipeInfoList.map(({ day, meal, title }) => {
+    const prompt = `You are a professional recipe writer. Create a recipe with the following format.\n\n**Meal Name:** ${day} ${meal} – ${title}\n**Ingredients:**\n- list each ingredient with quantity for ${people} people\n**Instructions:**\n1. step-by-step instructions\n**Prep Time:** X minutes\n**Macros:** Protein, Fat, Carbs`;
+    return openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        { role: 'system', content: 'You are a professional recipe writer.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 1000
+    }).then(c => c.choices?.[0]?.message?.content?.trim() || '');
+  });
+
+  const outputs = await Promise.all(tasks);
+  return outputs.join('\n\n---\n\n');
+}
+
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
     const sessionId = randomUUID();
     const { mealPlan, shoppingList, recipeInfoList } = await generateMealPlanData(data);
     const recipes = await generateRecipesParallel(data, recipeInfoList);
-
     const rawIngredients = parseIngredientsFromRecipes(recipes);
     const condensedIngredients = condenseIngredients(rawIngredients);
     const onHand = data.onHandIngredients?.toLowerCase().split(/\n|,/) || [];
