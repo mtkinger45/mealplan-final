@@ -44,8 +44,8 @@ function parseIngredientsFromRecipes(text) {
   for (const block of matches) {
     const lines = block.split('\n').slice(1);
     for (const line of lines) {
-      const clean = line.replace(/^[-•]\s*/, '').trim().toLowerCase();
-      if (clean) ingredients.push(clean);
+      const clean = line.replace(/^[-•]\s*/, '').trim();
+      if (clean && !/to taste|optional|as needed/i.test(clean)) ingredients.push(clean);
     }
   }
   return ingredients;
@@ -54,9 +54,10 @@ function parseIngredientsFromRecipes(text) {
 function normalizeIngredient(ingredient) {
   return ingredient
     .replace(/\(.*?\)/g, '')
-    .replace(/\d+(\.\d+)?\s?(cups?|oz|tablespoons?|teaspoons?|cloves?|bunches?|heads?|slices?|pieces?|lbs?|grams?|kg|containers?|cans?|packs?)/g, '')
+    .replace(/\b(?:fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|to taste|as needed|coarsely|finely|halved|juiced|zest|drained|shredded|grated)\b/gi, '')
+    .replace(/\d+(\.\d+)?\s?(cups?|oz|tablespoons?|tbsp|teaspoons?|tsp|cloves?|bunches?|heads?|slices?|pieces?|lbs?|grams?|kg|containers?|cans?|packs?|sticks?)/gi, '')
     .replace(/[^a-zA-Z\s]/g, '')
-    .replace(/\b(?:fresh|large|medium|small|chopped|diced|minced|sliced|to taste|optional)\b/g, '')
+    .replace(/\bof\b/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -64,10 +65,9 @@ function normalizeIngredient(ingredient) {
 function condenseIngredients(ingredientList) {
   const tally = {};
   for (const item of ingredientList) {
-    const base = normalizeIngredient(item);
+    const base = normalizeIngredient(item).toLowerCase();
     if (!base) continue;
-    if (!tally[base]) tally[base] = 0;
-    tally[base] += 1;
+    tally[base] = (tally[base] || 0) + 1;
   }
   return Object.entries(tally).map(([name, qty]) => `${name.charAt(0).toUpperCase() + name.slice(1)}: ${qty}`);
 }
