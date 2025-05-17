@@ -43,7 +43,7 @@ function parseStructuredIngredients(text) {
       const match = clean.match(/(\d+(?:\.\d+)?)(?:\s+)?([a-zA-Z]+)?\s+(.+)/);
       if (match) {
         const [, qty, unit, name] = match;
-        items.push({ name: normalizeIngredient(name), unit: unit || '', qty: parseFloat(qty) });
+        items.push({ name: normalizeIngredient(name), unit: normalizeUnit(unit), qty: parseFloat(qty) });
       } else {
         items.push({ name: normalizeIngredient(clean), unit: '', qty: 1 });
       }
@@ -59,7 +59,21 @@ function normalizeIngredient(name) {
     .replace(/[^a-zA-Z\s]/g, '')
     .replace(/\bof\b/g, '')
     .replace(/\s+/g, ' ')
-    .trim();
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeUnit(unit = '') {
+  const u = unit.toLowerCase();
+  if (['cup', 'cups'].includes(u)) return 'cups';
+  if (['tbsp', 'tablespoon', 'tablespoons'].includes(u)) return 'tbsp';
+  if (['tsp', 'teaspoon', 'teaspoons'].includes(u)) return 'tsp';
+  if (['oz', 'ounce', 'ounces'].includes(u)) return 'oz';
+  if (['lb', 'lbs', 'pound', 'pounds'].includes(u)) return 'lbs';
+  if (['clove', 'cloves'].includes(u)) return 'cloves';
+  if (['slice', 'slices'].includes(u)) return 'slices';
+  if (['egg', 'eggs'].includes(u)) return 'eggs';
+  return u;
 }
 
 function categorizeIngredient(name) {
@@ -80,7 +94,11 @@ app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
     const sessionId = randomUUID();
-    const { duration = 7, startDay = 'Monday', meals = ['Supper'], dietType = 'Any', dietaryPreferences = 'None', mealStyle = 'Any', cookingRequests = 'None', appliances = [], onHandIngredients = 'None', calendarInsights = 'None', people = 4, name = 'Guest' } = data;
+    const {
+      duration = 7, startDay = 'Monday', meals = ['Supper'], dietType = 'Any', dietaryPreferences = 'None',
+      mealStyle = 'Any', cookingRequests = 'None', appliances = [], onHandIngredients = 'None',
+      calendarInsights = 'None', people = 4, name = 'Guest'
+    } = data;
 
     const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}. Do not include any other meals (e.g., skip Supper if it's not listed).
 User Info:
@@ -114,20 +132,12 @@ Instructions:
     const jsonMatch = result.match(/\[.*\]/s);
     let recipeInfoList = [];
     if (jsonMatch) {
-      try {
-        recipeInfoList = JSON.parse(jsonMatch[0]);
-      } catch (e) {
-        console.error('[JSON PARSE ERROR]', e);
-      }
+      try { recipeInfoList = JSON.parse(jsonMatch[0]); } catch (e) { console.error('[JSON PARSE ERROR]', e); }
     }
-
-    if (!recipeInfoList.length) {
-      throw new Error('Recipe list is empty — unable to generate meal plan.');
-    }
+    if (!recipeInfoList.length) throw new Error('Recipe list is empty — unable to generate meal plan.');
 
     const tasks = recipeInfoList.map(({ day, meal, title }) => {
       const prompt = `You are a professional recipe writer. Create a recipe with the following format.
-
 **Meal Name:** ${day} ${meal} – ${title}
 **Ingredients:**
 - list each ingredient with quantity for ${people} people in U.S. measurements (e.g., cups, oz, tbsp)
@@ -135,7 +145,6 @@ Instructions:
 1. step-by-step instructions
 **Prep Time:** X minutes
 **Macros:** Protein, Fat, Carbs`;
-
       return openai.chat.completions.create({
         model: 'gpt-4',
         messages: [
@@ -154,7 +163,7 @@ Instructions:
     const aggregated = {};
     for (const { name, qty, unit } of structuredIngredients) {
       if (!name) continue;
-      const key = `${name.toLowerCase()}|${unit}`;
+      const key = `${name}|${unit}`;
       if (!aggregated[key]) aggregated[key] = { name, qty: 0, unit };
       aggregated[key].qty += qty;
     }
@@ -166,8 +175,8 @@ Instructions:
     Object.values(aggregated).forEach(({ name, qty, unit }) => {
       const cat = categorizeIngredient(name);
       if (!categorized[cat]) categorized[cat] = [];
-      const owned = onHandList.some(o => name.toLowerCase().includes(o.trim()));
-      const label = `${name.charAt(0).toUpperCase() + name.slice(1)}: ${qty} ${unit}` + (owned ? ' (on-hand)' : '');
+      const owned = onHandList.some(o => name.includes(o.trim()));
+      const label = `${capitalize(name)}: ${qty} ${unit}` + (owned ? ' (on-hand)' : '');
       categorized[cat].push(label);
       if (owned) onHandUsed.push(label);
     });
@@ -178,14 +187,18 @@ Instructions:
       for (const i of items) rebuiltShoppingList += `• ${i}\n`;
       rebuiltShoppingList += '\n';
     }
-
     if (onHandUsed.length) {
       rebuiltShoppingList += 'On-hand Ingredients Used:\n';
       for (const i of onHandUsed) rebuiltShoppingList += `• ${i}\n`;
     }
 
     await fs.mkdir(CACHE_DIR, { recursive: true });
-    await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify({ name: data.name || 'Guest', mealPlan: stripFormatting(mealPlanPart.trim()), shoppingList: rebuiltShoppingList.trim(), recipes }, null, 2));
+    await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify({
+      name: data.name || 'Guest',
+      mealPlan: stripFormatting(mealPlanPart.trim()),
+      shoppingList: rebuiltShoppingList.trim(),
+      recipes
+    }, null, 2));
 
     res.json({ sessionId, mealPlan: stripFormatting(mealPlanPart.trim()), shoppingList: rebuiltShoppingList.trim(), recipes });
   } catch (err) {
@@ -198,11 +211,9 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
   const { sessionId } = req.params;
   const { type } = req.query;
   const filePath = path.join('./cache', `${sessionId}.json`);
-
   try {
     const cache = JSON.parse(await fs.readFile(filePath, 'utf-8'));
     let content = '', filename = '';
-
     if (type === 'mealplan') {
       content = `Meal Plan for ${cache.name}\n\n${cache.mealPlan}`;
       filename = `${sessionId}-mealplan.pdf`;
@@ -215,7 +226,6 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
     } else {
       return res.status(400).json({ error: 'Invalid type parameter.' });
     }
-
     const buffer = await createPdfFromText(content, { type });
     const url = await uploadPdfToS3(buffer, filename);
     res.json({ url });
@@ -224,5 +234,9 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
     res.status(500).json({ error: 'Failed to generate PDF.' });
   }
 });
+
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
