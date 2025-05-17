@@ -49,9 +49,7 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
     let filename = '';
 
     if (type === 'mealplan') {
-      content = `Meal Plan for ${cache.name}
-
-${cache.mealPlan}`;
+      content = `Meal Plan for ${cache.name}\n\n${cache.mealPlan}`;
       filename = `${sessionId}-mealplan.pdf`;
     } else if (type === 'recipes') {
       content = cache.recipes;
@@ -167,7 +165,7 @@ Instructions:
   });
 
   const mergedList = mergeLines(shoppingListCleaned);
-  const rebuiltShoppingList = mergedList.join('\n') +
+  const rebuiltShoppingList = `Shopping List\n\n` + mergedList.join('\n') +
     (usedOnHand.length ? `\n\nOn-hand Ingredients Used:\n${usedOnHand.join('\n')}` : '');
 
   return {
