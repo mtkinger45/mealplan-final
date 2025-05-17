@@ -28,13 +28,13 @@ export async function createPdfFromText(text, options = {}) {
   const regular = (text, size = 12) => doc.font('Helvetica').fontSize(size).text(text);
 
   if (options.type === 'shopping-list') {
-    const sections = text.split(/(?=<b>.*?</b>)/);
+    const sections = text.split(/(?=^\w+:$)/gm);
     sections.forEach(section => {
       const lines = section.trim().split('\n');
       if (!lines.length) return;
-      const isHeader = lines[0].startsWith('<b>') && lines[0].endsWith('</b>');
+      const isHeader = /^\w+:$/.test(lines[0]);
       if (isHeader) {
-        const heading = lines[0].replace(/<\/?.*?>/g, '').trim();
+        const heading = lines[0].replace(/:$/, '').trim();
         safePageBreak();
         doc.moveDown(0.5);
         bold(heading + ':', 13);
@@ -54,8 +54,7 @@ export async function createPdfFromText(text, options = {}) {
     recipes.forEach((recipe, index) => {
       if (index !== 0) doc.addPage();
       const lines = recipe.split('\n');
-      let skipNextEmpty = false;
-      lines.forEach((line, idx) => {
+      lines.forEach(line => {
         const trimmed = line.trim();
         if (!trimmed) return;
 
@@ -76,9 +75,7 @@ export async function createPdfFromText(text, options = {}) {
           doc.moveDown(0.3);
           bold('Macros:', 12);
         } else {
-          if (skipNextEmpty && !trimmed) return;
           regular(trimmed, 12);
-          skipNextEmpty = false;
         }
       });
     });
