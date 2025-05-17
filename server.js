@@ -182,8 +182,7 @@ Instructions:
     }
 
     if (onHandUsed.length) {
-      rebuiltShoppingList += 'On-hand Ingredients Used:\n';
-
+      rebuiltShoppingList += 'On-hand Ingredients Used:
 ';
       for (const i of onHandUsed) rebuiltShoppingList += `• ${i}
 `;
