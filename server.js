@@ -186,13 +186,12 @@ Instructions:
     });
 
     let rebuiltShoppingList = '';
-    for (const [category, items] of Object.entries(categorized)) {
-      rebuiltShoppingList += `${category}:\n`;
-      for (const i of items.sort()) rebuiltShoppingList += `• ${i}\n`;
-      rebuiltShoppingList += '\n';
+    for (const category of Object.keys(categorized).sort()) {
+      rebuiltShoppingList += `\n${category}:\n`;
+      for (const i of categorized[category].sort()) rebuiltShoppingList += `• ${i}\n`;
     }
     if (onHandUsed.length) {
-      rebuiltShoppingList += 'On-hand Ingredients Used:\n';
+      rebuiltShoppingList += '\nOn-hand Ingredients Used:\n';
       for (const i of onHandUsed.sort()) rebuiltShoppingList += `• ${i}\n`;
     }
 
