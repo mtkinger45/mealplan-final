@@ -201,7 +201,7 @@ Instructions:
   let rebuiltShoppingList = 'Shopping List\n';
   for (const cat of Object.keys(categorized).sort()) {
     rebuiltShoppingList += `\n<b>${cat}</b>\n`;
-    for (const item of categorized[cat]) rebuiltShoppingList += `• ${item}\n`;
+    for (const item of categorized[cat].sort()) rebuiltShoppingList += `• ${item}\n`;
   }
 
   if (usedOnHand.length) {
