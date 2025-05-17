@@ -153,7 +153,15 @@ async function generateRecipesParallel(data, recipeInfoList) {
   if (!recipeInfoList.length) return '**No recipes could be generated based on the current meal plan.**';
   const { people = 4 } = data;
   const tasks = recipeInfoList.map(({ day, meal, title }) => {
-    const prompt = `You are a professional recipe writer. Create a recipe with the following format.\n\n**Meal Name:** ${day} ${meal} – ${title}\n**Ingredients:**\n- list each ingredient with quantity for ${people} people\n**Instructions:**\n1. step-by-step instructions\n**Prep Time:** X minutes\n**Macros:** Protein, Fat, Carbs`;
+    const prompt = `You are a professional recipe writer. Create a recipe with the following format.
+
+**Meal Name:** ${day} ${meal} – ${title}
+**Ingredients:**
+- list each ingredient with quantity for ${people} people
+**Instructions:**
+1. step-by-step instructions
+**Prep Time:** X minutes
+**Macros:** Protein, Fat, Carbs`;
     return openai.chat.completions.create({
       model: 'gpt-4',
       messages: [
