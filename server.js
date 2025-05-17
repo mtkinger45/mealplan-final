@@ -174,18 +174,14 @@ Instructions:
 
     let rebuiltShoppingList = '';
     for (const [category, items] of Object.entries(categorized)) {
-      rebuiltShoppingList += `${category}:
-`;
-      for (const i of items) rebuiltShoppingList += `• ${i}
-`;
+      rebuiltShoppingList += `${category}:\n`;
+      for (const i of items) rebuiltShoppingList += `• ${i}\n`;
       rebuiltShoppingList += '\n';
     }
 
     if (onHandUsed.length) {
-      rebuiltShoppingList += 'On-hand Ingredients Used:
-';
-      for (const i of onHandUsed) rebuiltShoppingList += `• ${i}
-`;
+      rebuiltShoppingList += 'On-hand Ingredients Used:\n';
+      for (const i of onHandUsed) rebuiltShoppingList += `• ${i}\n`;
     }
 
     await fs.mkdir(CACHE_DIR, { recursive: true });
