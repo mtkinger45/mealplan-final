@@ -90,6 +90,10 @@ function categorizeIngredient(name) {
   return 'Other';
 }
 
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
@@ -184,12 +188,12 @@ Instructions:
     let rebuiltShoppingList = '';
     for (const [category, items] of Object.entries(categorized)) {
       rebuiltShoppingList += `${category}:\n`;
-      for (const i of items) rebuiltShoppingList += `• ${i}\n`;
+      for (const i of items.sort()) rebuiltShoppingList += `• ${i}\n`;
       rebuiltShoppingList += '\n';
     }
     if (onHandUsed.length) {
       rebuiltShoppingList += 'On-hand Ingredients Used:\n';
-      for (const i of onHandUsed) rebuiltShoppingList += `• ${i}\n`;
+      for (const i of onHandUsed.sort()) rebuiltShoppingList += `• ${i}\n`;
     }
 
     await fs.mkdir(CACHE_DIR, { recursive: true });
@@ -234,9 +238,5 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
     res.status(500).json({ error: 'Failed to generate PDF.' });
   }
 });
-
-function capitalize(str) {
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
