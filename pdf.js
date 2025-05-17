@@ -28,13 +28,13 @@ export async function createPdfFromText(text, options = {}) {
   const regular = (text, size = 12) => doc.font('Helvetica').fontSize(size).text(text);
 
   if (options.type === 'shopping-list') {
-    const sections = text.split(/\n(?=<b>.*?<\/b>)/);
+    const sections = text.split(/(?=<b>.*?<\/b>)/);
     sections.forEach(section => {
       const lines = section.trim().split('\n');
       if (!lines.length) return;
       const isHeader = lines[0].startsWith('<b>') && lines[0].endsWith('</b>');
       if (isHeader) {
-        const heading = lines[0].replace(/<\/?.*?>/g, '').trim();
+        const heading = lines[0].replace(/<\/?b>/g, '').trim();
         safePageBreak();
         doc.moveDown(0.5);
         bold(heading, 13);
@@ -51,15 +51,12 @@ export async function createPdfFromText(text, options = {}) {
     });
   } else if (options.type === 'recipes') {
     const recipes = text.split(/\n---+\n/);
-    recipes.forEach(recipe => {
+    recipes.forEach((recipe, index) => {
+      if (index !== 0) doc.addPage();
       const lines = recipe.split('\n');
-      doc.addPage();
       lines.forEach(line => {
         const trimmed = line.trim();
-        if (!trimmed) {
-          doc.moveDown(1);
-          return;
-        }
+        if (!trimmed) return;
 
         safePageBreak();
 
