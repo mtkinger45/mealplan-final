@@ -79,7 +79,6 @@ app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
     const sessionId = randomUUID();
-
     const { duration = 7, startDay = 'Monday', meals = ['Supper'], dietType = 'Any', dietaryPreferences = 'None', mealStyle = 'Any', cookingRequests = 'None', appliances = [], onHandIngredients = 'None', calendarInsights = 'None', people = 4, name = 'Guest' } = data;
 
     const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}. Do not include any other meals (e.g., skip Supper if it's not listed).
@@ -101,7 +100,10 @@ Instructions:
 
     const mealPlanRes = await openai.chat.completions.create({
       model: 'gpt-4',
-      messages: [{ role: 'system', content: 'You are a professional meal planner.' }, { role: 'user', content: prompt }],
+      messages: [
+        { role: 'system', content: 'You are a professional meal planner.' },
+        { role: 'user', content: prompt }
+      ],
       temperature: 0.7,
       max_tokens: 3000
     });
@@ -118,10 +120,39 @@ Instructions:
       }
     }
 
-    const recipes = await generateRecipesParallel(data, recipeInfoList);
+    if (!recipeInfoList.length) {
+      throw new Error('Recipe list is empty — unable to generate meal plan.');
+    }
+
+    const tasks = recipeInfoList.map(({ day, meal, title }) => {
+      const prompt = `You are a professional recipe writer. Create a recipe with the following format.
+
+**Meal Name:** ${day} ${meal} – ${title}
+**Ingredients:**
+- list each ingredient with quantity for ${people} people
+**Instructions:**
+1. step-by-step instructions
+**Prep Time:** X minutes
+**Macros:** Protein, Fat, Carbs`;
+
+      return openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: [
+          { role: 'system', content: 'You are a professional recipe writer.' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 1000
+      }).then(c => c.choices?.[0]?.message?.content?.trim() || '');
+    });
+
+    const outputs = await Promise.all(tasks);
+    const recipes = outputs.join('\n\n---\n\n');
+
     const structuredIngredients = parseStructuredIngredients(recipes);
     const aggregated = {};
     for (const { name, qty, unit } of structuredIngredients) {
+      if (!name) continue;
       const key = `${name.toLowerCase()}|${unit}`;
       if (!aggregated[key]) aggregated[key] = { name, qty: 0, unit };
       aggregated[key].qty += qty;
