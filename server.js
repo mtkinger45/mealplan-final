@@ -166,7 +166,7 @@ Instructions:
     const structuredIngredients = parseStructuredIngredients(recipes);
     const aggregated = {};
     for (const { name, qty, unit } of structuredIngredients) {
-      if (!name) continue;
+      if (!name || isNaN(qty)) continue;
       const key = `${name}|${unit}`;
       if (!aggregated[key]) aggregated[key] = { name, qty: 0, unit };
       aggregated[key].qty += qty;
