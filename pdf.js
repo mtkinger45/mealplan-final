@@ -34,7 +34,7 @@ export async function createPdfFromText(text, options = {}) {
       if (!lines.length) return;
       const isHeader = lines[0].startsWith('<b>') && lines[0].endsWith('</b>');
       if (isHeader) {
-        const heading = lines[0].replace(/<\/?b>/g, '');
+        const heading = lines[0].replace(/<\/?.*?>/g, '').trim();
         safePageBreak();
         doc.moveDown(0.5);
         bold(heading, 13);
@@ -50,34 +50,37 @@ export async function createPdfFromText(text, options = {}) {
       }
     });
   } else if (options.type === 'recipes') {
-    const lines = text.split('\n');
-    lines.forEach((line, idx) => {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        doc.moveDown(1);
-        return;
-      }
+    const recipes = text.split(/\n---+\n/);
+    recipes.forEach(recipe => {
+      const lines = recipe.split('\n');
+      doc.addPage();
+      lines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          doc.moveDown(1);
+          return;
+        }
 
-      safePageBreak();
+        safePageBreak();
 
-      if (/^\*\*Meal Name:\*\*/i.test(trimmed)) {
-        doc.addPage();
-        bold(trimmed.replace(/\*\*/g, '').replace('Meal Name:', '').trim(), 14);
-      } else if (/^\*\*Ingredients:\*\*/i.test(trimmed)) {
-        doc.moveDown(0.3);
-        bold('Ingredients:', 12);
-      } else if (/^\*\*Instructions:\*\*/i.test(trimmed)) {
-        doc.moveDown(0.3);
-        bold('Instructions:', 12);
-      } else if (/^\*\*Prep Time:\*\*/i.test(trimmed)) {
-        doc.moveDown(0.3);
-        regular(trimmed.replace(/\*\*/g, ''), 12);
-      } else if (/^\*\*Macros:\*\*/i.test(trimmed)) {
-        regular(trimmed.replace(/\*\*/g, ''), 12);
-        doc.addPage();
-      } else {
-        regular(trimmed, 12);
-      }
+        if (/^\*\*Meal Name:\*\*/i.test(trimmed)) {
+          bold(trimmed.replace(/\*\*/g, '').replace('Meal Name:', '').trim(), 14);
+        } else if (/^\*\*Ingredients:\*\*/i.test(trimmed)) {
+          doc.moveDown(0.3);
+          bold('Ingredients:', 12);
+        } else if (/^\*\*Instructions:\*\*/i.test(trimmed)) {
+          doc.moveDown(0.3);
+          bold('Instructions:', 12);
+        } else if (/^\*\*Prep Time:\*\*/i.test(trimmed)) {
+          doc.moveDown(0.3);
+          regular(trimmed.replace(/\*\*/g, ''), 12);
+        } else if (/^\*\*Macros:\*\*/i.test(trimmed)) {
+          doc.moveDown(0.3);
+          bold('Macros:', 12);
+        } else {
+          regular(trimmed, 12);
+        }
+      });
     });
   } else {
     const lines = text.split('\n');
