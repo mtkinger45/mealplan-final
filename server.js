@@ -13,8 +13,55 @@ const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CACHE_DIR = './cache';
 
-app.use(cors({ origin: true }));
+app.use(cors({
+  origin: function (origin, callback) {
+    const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn('[CORS BLOCKED ORIGIN]', origin);
+      callback(new Error('CORS not allowed from this origin'));
+    }
+  },
+  credentials: true
+}));
+
 app.use(bodyParser.json({ limit: '5mb' }));
+
+function stripFormatting(text) {
+  return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*/g, '');
+}
+
+function normalizeKey(key) {
+  return key.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function mergeLines(lines) {
+  const merged = {};
+  lines.forEach(line => {
+    const match = line.match(/^(.+?):\s*(.+)$/);
+    if (match) {
+      const key = normalizeKey(match[1]);
+      const value = match[2];
+      if (!merged[key]) merged[key] = { name: match[1], values: [] };
+      merged[key].values.push(value);
+    } else {
+      const key = normalizeKey(line);
+      if (!merged[key]) merged[key] = { name: line, values: [] };
+    }
+  });
+  return Object.values(merged).map(entry => `${entry.name}${entry.values.length ? ': ' + entry.values.join(' + ') : ''}`);
+}
+
+function categorizeLine(line) {
+  const key = normalizeKey(line);
+  if (/egg|milk|cheese|cream/.test(key)) return 'Dairy';
+  if (/steak|beef|chicken|bacon|pork|fish|salmon|turkey/.test(key)) return 'Meat';
+  if (/apple|lemon|avocado|banana|fruit|olive/.test(key)) return 'Fruit';
+  if (/flour|oil|vinegar|mustard|sauce|salt|pepper|sugar|spice|butter|breadcrumbs|honey/.test(key)) return 'Pantry';
+  if (/broccoli|carrot|onion|spinach|lettuce|cabbage|mushroom|pepper|zucchini|tomato|peas|beans|asparagus|celery|cucumber/.test(key)) return 'Produce';
+  return 'Other';
+}
 
 app.post('/api/mealplan', async (req, res) => {
   try {
@@ -71,27 +118,6 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-
-function normalizeKey(key) {
-  return key.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
-
-function mergeLines(lines) {
-  const merged = {};
-  lines.forEach(line => {
-    const match = line.match(/^(.+?):\s*(.+)$/);
-    if (match) {
-      const key = normalizeKey(match[1]);
-      const value = match[2];
-      if (!merged[key]) merged[key] = { name: match[1], values: [] };
-      merged[key].values.push(value);
-    } else {
-      const key = normalizeKey(line);
-      if (!merged[key]) merged[key] = { name: line, values: [] };
-    }
-  });
-  return Object.values(merged).map(entry => `${entry.name}${entry.values.length ? ': ' + entry.values.join(' + ') : ''}`);
-}
 
 async function generateMealPlan(data) {
   const {
@@ -165,12 +191,27 @@ Instructions:
   });
 
   const mergedList = mergeLines(shoppingListCleaned);
-  const rebuiltShoppingList = `Shopping List\n\n` + mergedList.join('\n') +
-    (usedOnHand.length ? `\n\nOn-hand Ingredients Used:\n${usedOnHand.join('\n')}` : '');
+  const categorized = {};
+  for (const line of mergedList) {
+    const cat = categorizeLine(line);
+    if (!categorized[cat]) categorized[cat] = [];
+    categorized[cat].push(line);
+  }
+
+  let rebuiltShoppingList = 'Shopping List\n';
+  for (const cat of Object.keys(categorized).sort()) {
+    rebuiltShoppingList += `\n<b>${cat}</b>\n`;
+    for (const item of categorized[cat]) rebuiltShoppingList += `• ${item}\n`;
+  }
+
+  if (usedOnHand.length) {
+    rebuiltShoppingList += '\n<b>On-hand Ingredients Used</b>\n';
+    for (const item of usedOnHand.sort()) rebuiltShoppingList += `• ${item}\n`;
+  }
 
   return {
     mealPlan: mealPlanPart?.trim() || '',
-    shoppingList: rebuiltShoppingList,
+    shoppingList: rebuiltShoppingList.trim(),
     recipeInfoList
   };
 }
