@@ -160,6 +160,7 @@ Instructions:
 
     const categorized = {};
     const onHandList = data.onHandIngredients?.toLowerCase().split(/\n|,/) || [];
+    const onHandUsed = [];
 
     Object.values(aggregated).forEach(({ name, qty, unit }) => {
       const cat = categorizeIngredient(name);
@@ -167,6 +168,7 @@ Instructions:
       const isOwned = onHandList.some(o => name.toLowerCase().includes(o.trim()));
       const label = `${name.charAt(0).toUpperCase() + name.slice(1)}: ${qty} ${unit}` + (isOwned ? ' (on-hand)' : '');
       categorized[cat].push(label);
+      if (isOwned) onHandUsed.push(label);
     });
 
     let rebuiltShoppingList = '';
@@ -176,6 +178,11 @@ Instructions:
         rebuiltShoppingList += `• ${i}\n`;
       }
       rebuiltShoppingList += '\n';
+    }
+
+    if (onHandUsed.length) {
+      rebuiltShoppingList += 'On-hand Ingredients Used:\n';
+      for (const i of onHandUsed) rebuiltShoppingList += `• ${i}\n`;
     }
 
     await fs.mkdir(CACHE_DIR, { recursive: true });
