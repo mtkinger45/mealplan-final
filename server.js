@@ -13,12 +13,13 @@ const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CACHE_DIR = './cache';
 
-const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
 app.use(cors({
   origin: function (origin, callback) {
+    const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.warn('[CORS BLOCKED ORIGIN]', origin);
       callback(new Error('CORS not allowed from this origin'));
     }
   },
@@ -129,7 +130,7 @@ Instructions:
 
 **Meal Name:** ${day} ${meal} – ${title}
 **Ingredients:**
-- list each ingredient with quantity for ${people} people
+- list each ingredient with quantity for ${people} people in U.S. measurements (e.g., cups, oz, tbsp)
 **Instructions:**
 1. step-by-step instructions
 **Prep Time:** X minutes
@@ -165,24 +166,26 @@ Instructions:
     Object.values(aggregated).forEach(({ name, qty, unit }) => {
       const cat = categorizeIngredient(name);
       if (!categorized[cat]) categorized[cat] = [];
-      const isOwned = onHandList.some(o => name.toLowerCase().includes(o.trim()));
-      const label = `${name.charAt(0).toUpperCase() + name.slice(1)}: ${qty} ${unit}` + (isOwned ? ' (on-hand)' : '');
+      const owned = onHandList.some(o => name.toLowerCase().includes(o.trim()));
+      const label = `${name.charAt(0).toUpperCase() + name.slice(1)}: ${qty} ${unit}` + (owned ? ' (on-hand)' : '');
       categorized[cat].push(label);
-      if (isOwned) onHandUsed.push(label);
+      if (owned) onHandUsed.push(label);
     });
 
     let rebuiltShoppingList = '';
     for (const [category, items] of Object.entries(categorized)) {
-      rebuiltShoppingList += `${category}:\n`;
-      for (const i of items) {
-        rebuiltShoppingList += `• ${i}\n`;
-      }
+      rebuiltShoppingList += `${category}:
+`;
+      for (const i of items) rebuiltShoppingList += `• ${i}
+`;
       rebuiltShoppingList += '\n';
     }
 
     if (onHandUsed.length) {
-      rebuiltShoppingList += 'On-hand Ingredients Used:\n';
-      for (const i of onHandUsed) rebuiltShoppingList += `• ${i}\n`;
+      rebuiltShoppingList += 'On-hand Ingredients Used:
+';
+      for (const i of onHandUsed) rebuiltShoppingList += `• ${i}
+`;
     }
 
     await fs.mkdir(CACHE_DIR, { recursive: true });
