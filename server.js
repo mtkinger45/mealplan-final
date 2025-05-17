@@ -54,8 +54,8 @@ function parseIngredientsFromRecipes(text) {
 function normalizeIngredient(ingredient) {
   return ingredient
     .replace(/\(.*?\)/g, '')
-    .replace(/\b(?:fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|to taste|as needed|coarsely|finely|halved|juiced|zest|drained|shredded|grated)\b/gi, '')
-    .replace(/\d+(\.\d+)?\s?(cups?|oz|tablespoons?|tbsp|teaspoons?|tsp|cloves?|bunches?|heads?|slices?|pieces?|lbs?|grams?|kg|containers?|cans?|packs?|sticks?)/gi, '')
+    .replace(/\b(?:fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|to taste|as needed|coarsely|finely|halved|juiced|zest|drained|shredded|grated|boneless|skinless|low-sodium|lowfat|for garnish)\b/gi, '')
+    .replace(/\d+(\.\d+)?\s?(cups?|oz|tablespoons?|tbsp|teaspoons?|tsp|cloves?|bunches?|heads?|slices?|pieces?|lbs?|grams?|kg|containers?|cans?|packs?|sticks?|dozen|bottles?|blocks?)?/gi, '')
     .replace(/[^a-zA-Z\s]/g, '')
     .replace(/\bof\b/g, '')
     .replace(/\s+/g, ' ')
@@ -74,14 +74,14 @@ function condenseIngredients(ingredientList) {
 
 function categorizeIngredient(ingredient) {
   const i = ingredient.toLowerCase();
-  if (/beef|ribeye|sirloin|steak|ground/.test(i)) return 'Meat';
+  if (/beef|ribeye|sirloin|steak|chuck|ground/.test(i)) return 'Meat';
   if (/chicken|thigh|breast|drumstick/.test(i)) return 'Meat';
-  if (/pork|bacon|sausage/.test(i)) return 'Meat';
+  if (/pork|bacon|ham|sausage/.test(i)) return 'Meat';
   if (/fish|salmon|tilapia|cod|shrimp/.test(i)) return 'Meat';
   if (/egg/.test(i)) return 'Dairy';
   if (/milk|cream|cheese/.test(i)) return 'Dairy';
   if (/lettuce|spinach|zucchini|broccoli|onion|pepper|cucumber|radish|mushroom|cauliflower|tomato|peas|green beans|asparagus|cabbage/.test(i)) return 'Produce';
-  if (/butter|ghee|oil|olive/.test(i)) return 'Pantry';
+  if (/butter|ghee|oil|olive|vinegar|sugar/.test(i)) return 'Pantry';
   if (/lemon|lime|avocado|olive/.test(i)) return 'Fruit';
   return 'Other';
 }
@@ -103,8 +103,7 @@ async function generateMealPlanData(data) {
   } = data;
 
   const cleanedInsights = extractRelevantInsights(calendarInsights, startDay, duration);
-  const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}.
-Do not include any other meals (e.g., skip Supper if it's not listed).
+  const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}. Do not include any other meals (e.g., skip Supper if it's not listed).
 User Info:
 - Diet Type: ${dietType}
 - Preferences: ${dietaryPreferences}
@@ -117,6 +116,7 @@ User Info:
 
 Instructions:
 - Use ${startDay} as the first day
+- Respect all dietary preferences (e.g., do not include shellfish if avoided)
 - End with a shopping list grouped by category and subtract on-hand items
 - Include a JSON array of all meals with day, meal type, and title (for recipe lookup)`;
 
