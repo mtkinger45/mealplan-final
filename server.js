@@ -54,30 +54,37 @@ function parseStructuredIngredients(text) {
 
 function normalizeIngredient(name) {
   return name
+    .toLowerCase()
     .replace(/\(.*?\)/g, '')
     .replace(/\b(fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|to taste|as needed|coarsely|finely|halved|juiced|zest|drained|shredded|grated|boneless|skinless|low-sodium|lowfat|for garnish)\b/gi, '')
     .replace(/[^a-zA-Z\s]/g, '')
     .replace(/\bof\b/g, '')
     .replace(/\s+/g, ' ')
     .trim()
-    .toLowerCase();
+    .replace(/\blemon juice\b.*$/, 'lemon juice')
+    .replace(/\bcheddar cheese\b.*$/, 'cheddar cheese')
+    .replace(/\bwhole milk\b.*$/, 'milk')
+    .replace(/\begg[s]?\b.*$/, 'eggs')
+    .replace(/\bonion[s]?\b.*$/, 'onions')
+    .replace(/\bpepper[s]?\b.*$/, 'peppers');
 }
 
 function normalizeUnit(unit = '') {
   const u = unit.toLowerCase();
-  if (['cup', 'cups'].includes(u)) return 'cups';
-  if (['tbsp', 'tablespoon', 'tablespoons'].includes(u)) return 'tbsp';
-  if (['tsp', 'teaspoon', 'teaspoons'].includes(u)) return 'tsp';
-  if (['oz', 'ounce', 'ounces'].includes(u)) return 'oz';
-  if (['lb', 'lbs', 'pound', 'pounds'].includes(u)) return 'lbs';
-  if (['clove', 'cloves'].includes(u)) return 'cloves';
-  if (['slice', 'slices'].includes(u)) return 'slices';
-  if (['egg', 'eggs'].includes(u)) return 'eggs';
+  if (["cup", "cups"].includes(u)) return "cups";
+  if (["tbsp", "tablespoon", "tablespoons"].includes(u)) return "tbsp";
+  if (["tsp", "teaspoon", "teaspoons"].includes(u)) return "tsp";
+  if (["oz", "ounce", "ounces"].includes(u)) return "oz";
+  if (["lb", "lbs", "pound", "pounds"].includes(u)) return "lbs";
+  if (["clove", "cloves"].includes(u)) return "cloves";
+  if (["slice", "slices"].includes(u)) return "slices";
+  if (["egg", "eggs"].includes(u)) return "eggs";
   return u;
 }
 
 function categorizeIngredient(name) {
   const i = name.toLowerCase();
+  if (/lemon|lime|avocado|olive/.test(i)) return 'Fruit';
   if (/beef|ribeye|sirloin|steak|chuck|ground/.test(i)) return 'Meat';
   if (/chicken|thigh|breast|drumstick/.test(i)) return 'Meat';
   if (/pork|bacon|ham|sausage/.test(i)) return 'Meat';
@@ -86,7 +93,6 @@ function categorizeIngredient(name) {
   if (/milk|cream|cheese/.test(i)) return 'Dairy';
   if (/lettuce|spinach|zucchini|broccoli|onion|pepper|cucumber|radish|mushroom|cauliflower|tomato|peas|green beans|asparagus|cabbage/.test(i)) return 'Produce';
   if (/butter|ghee|oil|olive|vinegar|sugar/.test(i)) return 'Pantry';
-  if (/lemon|lime|avocado|olive/.test(i)) return 'Fruit';
   return 'Other';
 }
 
