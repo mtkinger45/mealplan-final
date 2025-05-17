@@ -28,11 +28,11 @@ export async function createPdfFromText(text, options = {}) {
   const regular = (text, size = 12) => doc.font('Helvetica').fontSize(size).text(text);
 
   if (options.type === 'shopping-list') {
-    const sections = text.split(/(?=^\w+:$)/gm);
+    const sections = text.split(/(?=^\w.+?:$)/gm);
     sections.forEach(section => {
       const lines = section.trim().split('\n');
       if (!lines.length) return;
-      const isHeader = /^\w+:$/.test(lines[0]);
+      const isHeader = /^\w.+?:$/.test(lines[0]);
       if (isHeader) {
         const heading = lines[0].replace(/:$/, '').trim();
         safePageBreak();
