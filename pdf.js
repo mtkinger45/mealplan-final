@@ -34,10 +34,10 @@ export async function createPdfFromText(text, options = {}) {
       if (!lines.length) return;
       const isHeader = lines[0].startsWith('<b>') && lines[0].endsWith('</b>');
       if (isHeader) {
-        const heading = lines[0].replace(/<\/?b>/g, '').trim();
+        const heading = lines[0].replace(/<\/?.*?>/g, '').trim();
         safePageBreak();
         doc.moveDown(0.5);
-        bold(heading, 13);
+        bold(heading + ':', 13);
         lines.slice(1).forEach(line => {
           safePageBreak();
           regular(line.replace(/^[-–•]\s*/, '').trim(), 12);
@@ -54,7 +54,7 @@ export async function createPdfFromText(text, options = {}) {
     recipes.forEach((recipe, index) => {
       if (index !== 0) doc.addPage();
       const lines = recipe.split('\n');
-      lines.forEach(line => {
+      lines.forEach((line, idx) => {
         const trimmed = line.trim();
         if (!trimmed) return;
 
@@ -75,6 +75,8 @@ export async function createPdfFromText(text, options = {}) {
           doc.moveDown(0.3);
           bold('Macros:', 12);
         } else {
+          // Reduce extra whitespace between lines
+          if (idx > 0 && lines[idx - 1].trim() === '') return;
           regular(trimmed, 12);
         }
       });
