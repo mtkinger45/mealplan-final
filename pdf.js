@@ -89,6 +89,9 @@ export async function createPdfFromText(text, options = {}) {
       } else if (/^([A-Z][a-z]+day)/.test(trimmed)) {
         doc.moveDown(0.5);
         bold(trimmed, 12);
+      } else if (/^On-hand Ingredients Used/i.test(trimmed)) {
+        doc.moveDown(1);
+        bold(trimmed, 13);
       } else {
         regular(trimmed, 12);
       }
