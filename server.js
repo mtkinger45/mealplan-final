@@ -100,6 +100,39 @@ function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+function groupByCategory(ingredients, onHandItems = []) {
+  const grouped = {};
+  const onHandUsed = [];
+
+  for (const item of ingredients) {
+    const cat = categorizeIngredient(item.name);
+    const key = `${item.name}__${item.unit}`;
+    if (!grouped[cat]) grouped[cat] = {};
+    if (!grouped[cat][key]) grouped[cat][key] = { ...item, qty: 0 };
+    grouped[cat][key].qty += item.qty;
+
+    const flatName = item.name.toLowerCase();
+    if (onHandItems.some(h => flatName.includes(h.toLowerCase()))) {
+      onHandUsed.push(item);
+    }
+  }
+
+  const lines = [];
+  const sortedCats = Object.keys(grouped).sort();
+  for (const cat of sortedCats) {
+    lines.push(`\n<b>${cat}</b>`);
+    const sortedItems = Object.values(grouped[cat]).sort((a, b) => a.name.localeCompare(b.name));
+    for (const ing of sortedItems) {
+      const label = ing.unit ? `${ing.qty} ${ing.unit}` : `${ing.qty}`;
+      const isOnHand = onHandItems.some(h => ing.name.toLowerCase().includes(h.toLowerCase()));
+      const note = isOnHand ? ' (on hand)' : '';
+      lines.push(`• ${capitalize(ing.name)}: ${label}${note}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
