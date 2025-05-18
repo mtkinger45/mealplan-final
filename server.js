@@ -100,21 +100,31 @@ function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-function parseOnHandWithQty(raw) {
-  const map = {};
-  const lines = raw.split(/[\n,]/).map(x => x.trim()).filter(Boolean);
-  for (const line of lines) {
-    const match = line.match(/(\d+(?:\.\d+)?)\s*([a-zA-Z]*)\s+(.*)/);
+function adjustQuantitiesWithOnHand(aggregated, onHandList) {
+  const onHandMap = {};
+  for (const entry of onHandList) {
+    const normalized = normalizeIngredient(entry);
+    const match = normalized.match(/(\d+)\s+([a-zA-Z]+)?\s*(.*)/);
     if (match) {
-      const [, qty, unitRaw, nameRaw] = match;
+      const [, qty, unitRaw, name] = match;
       const unit = normalizeUnit(unitRaw);
-      const name = normalizeIngredient(nameRaw);
-      const key = `${name}|${unit}`;
-      map[key] = (map[key] || 0) + parseFloat(qty);
+      const key = `${normalizeIngredient(name)}|${unit}`;
+      onHandMap[key] = parseFloat(qty);
     }
   }
-  return map;
+  const used = [];
+  const adjusted = {};
+  for (const key in aggregated) {
+    const { name, qty, unit } = aggregated[key];
+    const mapKey = `${name}|${unit}`;
+    const onHandQty = onHandMap[mapKey] || 0;
+    const newQty = Math.max(0, qty - onHandQty);
+    adjusted[key] = { name, unit, qty: newQty };
+    if (onHandQty > 0) used.push(`${capitalize(name)}: ${Math.min(qty, onHandQty)} ${unit}`);
+  }
+  return { adjusted, used };
 }
+
 
 app.post('/api/mealplan', async (req, res) => {
   try {
