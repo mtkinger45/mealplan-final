@@ -261,7 +261,7 @@ Instructions:
 for (const item of sortedItems) {
   rebuiltShoppingList += `• ${item}\n`;
 }
-
+    }
 
     await fs.mkdir(CACHE_DIR, { recursive: true });
     await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify({
