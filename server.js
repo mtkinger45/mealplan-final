@@ -100,27 +100,182 @@ function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-function adjustQuantitiesWithOnHand(aggregated, onHandList) {
-  const onHandMap = {};
-  for (const entry of onHandList) {
-    const normalized = normalizeIngredient(entry);
-    const match = normalized.match(/(\d+)\s+([a-zA-Z]+)?\s*(.*)/);
-    if (match) {
-      const [, qty, unitRaw, name] = match;
-      const unit = normalizeUnit(unitRaw);
-      const key = `${normalizeIngredient(name)}|${unit}`;
-      onHandMap[key] = parseFloat(qty);
+function groupByCategory(ingredients, onHandItems = []) {
+  const grouped = {};
+  const onHandUsed = [];
+
+  for (const item of ingredients) {
+    const cat = categorizeIngredient(item.name);
+    const key = `${item.name}__${item.unit}`;
+    if (!grouped[cat]) grouped[cat] = {};
+    if (!grouped[cat][key]) grouped[cat][key] = { ...item, qty: 0 };
+    grouped[cat][key].qty += item.qty;
+
+    const flatName = item.name.toLowerCase();
+    if (onHandItems.some(h => flatName.includes(h.toLowerCase()))) {
+      onHandUsed.push(item);
     }
   }
-  const used = [];
-  const adjusted = {};
-  for (const key in aggregated) {
-    const { name, qty, unit } = aggregated[key];
-    const mapKey = `${name}|${unit}`;
-    const onHandQty = onHandMap[mapKey] || 0;
-    const newQty = Math.max(0, qty - onHandQty);
-    adjusted[key] = { name, unit, qty: newQty };
-    if (onHandQty > 0) used.push(`${capitalize(name)}: ${Math.min(qty, onHandQty)} ${unit}`);
+
+  const lines = [];
+  const sortedCats = Object.keys(grouped).sort();
+  for (const cat of sortedCats) {
+    lines.push(`\n<b>${cat}</b>`);
+    const sortedItems = Object.values(grouped[cat]).sort((a, b) => a.name.localeCompare(b.name));
+    for (const ing of sortedItems) {
+      const label = ing.unit ? `${ing.qty} ${ing.unit}` : `${ing.qty}`;
+      const isOnHand = onHandItems.some(h => ing.name.toLowerCase().includes(h.toLowerCase()));
+      const note = isOnHand ? ' (on hand)' : '';
+      lines.push(`• ${capitalize(ing.name)}: ${label}${note}`);
+    }
   }
-  return { adjusted, used };
+
+  return lines.join('\n');
 }
+
+
+app.post('/api/mealplan', async (req, res) => {
+  try {
+    const data = req.body;
+    const sessionId = randomUUID();
+    const {
+      duration = 7, startDay = 'Monday', meals = ['Supper'], dietType = 'Any', dietaryPreferences = 'None',
+      mealStyle = 'Any', cookingRequests = 'None', appliances = [], onHandIngredients = 'None',
+      calendarInsights = 'None', people = 4, name = 'Guest'
+    } = data;
+
+    const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}. Do not include any other meals (e.g., skip Supper if it's not listed).
+User Info:
+- Diet Type: ${dietType}
+- Preferences: ${dietaryPreferences}
+- Cooking Style: ${mealStyle}
+- Special Requests: ${cookingRequests}
+- Appliances: ${appliances.join(', ') || 'None'}
+- On-hand Ingredients: ${onHandIngredients}
+- Household size: ${people}
+- Calendar Insights: ${calendarInsights || 'None'}
+
+Instructions:
+- Use ${startDay} as the first day
+- Respect all dietary preferences (e.g., do not include shellfish if avoided)
+- End with a shopping list grouped by category and subtract on-hand items
+- Include a JSON array of all meals with day, meal type, and title (for recipe lookup)`;
+
+    const mealPlanRes = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        { role: 'system', content: 'You are a professional meal planner.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 3000
+    });
+
+    const result = mealPlanRes.choices?.[0]?.message?.content || '';
+    const [mealPlanPart] = result.split(/(?=Shopping List)/i);
+    const jsonMatch = result.match(/\[.*\]/s);
+    let recipeInfoList = [];
+    if (jsonMatch) {
+      try { recipeInfoList = JSON.parse(jsonMatch[0]); } catch (e) { console.error('[JSON PARSE ERROR]', e); }
+    }
+    if (!recipeInfoList.length) throw new Error('Recipe list is empty — unable to generate meal plan.');
+
+    const tasks = recipeInfoList.map(({ day, meal, title }) => {
+      const prompt = `You are a professional recipe writer. Create a recipe with the following format.
+**Meal Name:** ${day} ${meal} – ${title}
+**Ingredients:**
+- list each ingredient with quantity for ${people} people in U.S. measurements (e.g., cups, oz, tbsp)
+**Instructions:**
+1. step-by-step instructions
+**Prep Time:** X minutes
+**Macros:** Protein, Fat, Carbs`;
+      return openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: [
+          { role: 'system', content: 'You are a professional recipe writer.' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 1000
+      }).then(c => c.choices?.[0]?.message?.content?.trim() || '');
+    });
+
+    const outputs = await Promise.all(tasks);
+    const recipes = outputs.join('\n\n---\n\n');
+
+    const structuredIngredients = parseStructuredIngredients(recipes);
+    const aggregated = {};
+    for (const { name, qty, unit } of structuredIngredients) {
+      if (!name || isNaN(qty)) continue;
+      const key = `${name}|${unit}`;
+      if (!aggregated[key]) aggregated[key] = { name, qty: 0, unit };
+      aggregated[key].qty += qty;
+    }
+
+    const categorized = {};
+    const onHandList = data.onHandIngredients?.toLowerCase().split(/\n|,/) || [];
+    const onHandUsed = [];
+
+    Object.values(aggregated).forEach(({ name, qty, unit }) => {
+      const cat = categorizeIngredient(name);
+      if (!categorized[cat]) categorized[cat] = [];
+      const owned = onHandList.some(o => name.includes(o.trim()));
+      const label = `${capitalize(name)}: ${qty} ${unit}` + (owned ? ' (on-hand)' : '');
+      categorized[cat].push(label);
+      if (owned) onHandUsed.push(label);
+    });
+
+    let rebuiltShoppingList = '';
+    for (const category of Object.keys(categorized).sort()) {
+      rebuiltShoppingList += `\n${category}:\n`;
+      for (const i of categorized[category].sort()) rebuiltShoppingList += `• ${i}\n`;
+    }
+    if (onHandUsed.length) {
+      rebuiltShoppingList += '\nOn-hand Ingredients Used:\n';
+      for (const i of onHandUsed.sort()) rebuiltShoppingList += `• ${i}\n`;
+    }
+
+    await fs.mkdir(CACHE_DIR, { recursive: true });
+    await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify({
+      name: data.name || 'Guest',
+      mealPlan: stripFormatting(mealPlanPart.trim()),
+      shoppingList: rebuiltShoppingList.trim(),
+      recipes
+    }, null, 2));
+
+    res.json({ sessionId, mealPlan: stripFormatting(mealPlanPart.trim()), shoppingList: rebuiltShoppingList.trim(), recipes });
+  } catch (err) {
+    console.error('[API ERROR]', err);
+    res.status(500).json({ error: 'Meal plan generation failed.' });
+  }
+});
+
+app.get('/api/pdf/:sessionId', async (req, res) => {
+  const { sessionId } = req.params;
+  const { type } = req.query;
+  const filePath = path.join('./cache', `${sessionId}.json`);
+  try {
+    const cache = JSON.parse(await fs.readFile(filePath, 'utf-8'));
+    let content = '', filename = '';
+    if (type === 'mealplan') {
+      content = `Meal Plan for ${cache.name}\n\n${cache.mealPlan}`;
+      filename = `${sessionId}-mealplan.pdf`;
+    } else if (type === 'recipes') {
+      content = cache.recipes;
+      filename = `${sessionId}-recipes.pdf`;
+    } else if (type === 'shopping-list') {
+      content = cache.shoppingList;
+      filename = `${sessionId}-shopping.pdf`;
+    } else {
+      return res.status(400).json({ error: 'Invalid type parameter.' });
+    }
+    const buffer = await createPdfFromText(content, { type });
+    const url = await uploadPdfToS3(buffer, filename);
+    res.json({ url });
+  } catch (err) {
+    console.error('[PDF ERROR]', err);
+    res.status(500).json({ error: 'Failed to generate PDF.' });
+  }
+});
+
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
