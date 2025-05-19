@@ -13,21 +13,32 @@ const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CACHE_DIR = './cache';
 
+// FIXED: Explicit CORS headers
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', 'https://thechaostoconfidencecollective.com');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, Content-Type, Accept');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
-
 
 app.use(bodyParser.json({ limit: '5mb' }));
 
 function stripFormatting(text) {
   return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*/g, '');
+}
+
+function normalizeName(name) {
+  return name.toLowerCase()
+    .replace(/ribeye.*|steaks?.*|beef.*steak/, 'ribeye steak')
+    .replace(/onions?.*|chopped onion.*/, 'onion')
+    .replace(/garlic.*|minced garlic/, 'garlic')
+    .replace(/butter.*|unsalted butter|salted butter|melted butter/, 'butter')
+    .replace(/eggs?.*|beaten eggs/, 'eggs')
+    .replace(/(pieces|cups|slices|cloves|oz|lbs|tablespoons|tablespoon|tbsp|tsp|teaspoons|teaspoon)/gi, '')
+    .replace(/[^a-zA-Z ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function normalizeAndParseIngredient(line) {
@@ -43,10 +54,7 @@ function normalizeAndParseIngredient(line) {
   const [, qtyStr, unitRaw, nameRaw] = match;
   const qty = parseFloat(qtyStr);
   const unit = (unitRaw || '').toLowerCase();
-  const name = nameRaw
-    .replace(/approximately|about|each|medium|large|small|boneless|skinless|trimmed|cleaned|sliced|diced|ends|halved|zested|juiced|grilled|beaten|leftover|cut into.*|thickcut|thinly|for serving/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const name = normalizeName(nameRaw);
 
   return { name, qty, unit };
 }
@@ -140,20 +148,16 @@ Instructions:
     });
 
     const recipeBlocks = await Promise.all(tasks);
+    const recipesByDay = recipeInfoList.map((entry, idx) => ({
+      ...entry,
+      fullText: recipeBlocks[idx]
+    }));
 
-const recipesByDay = recipeInfoList.map((entry, idx) => {
-  const content = recipeBlocks[idx];
-  return {
-    ...entry,
-    fullText: content
-  };
-});
+    const recipes = recipesByDay.map(r =>
+      `**Meal Name:** ${r.day} ${r.meal} – ${r.title}\n${r.fullText}`
+    ).join('\n\n---\n\n');
 
-const recipes = recipesByDay.map(r =>
-  `**Meal Name:** ${r.day} ${r.meal} – ${r.title}\n${r.fullText}`
-).join('\n\n---\n\n');
-
-
+    // Extract and parse ingredients
     const rawIngredients = [];
     const recipeSections = recipes.match(/\*\*Ingredients:\*\*[\s\S]*?(?=\*\*Instructions:|\*\*Prep Time|---|$)/g) || [];
     for (const block of recipeSections) {
@@ -166,7 +170,6 @@ const recipes = recipesByDay.map(r =>
       }
     }
 
-    // Parse on-hand map
     const onHandMap = parseOnHandMap(onHandIngredients);
     const grouped = {};
 
@@ -179,13 +182,11 @@ const recipes = recipesByDay.map(r =>
       const needed = Math.max(parsed.qty - available, 0);
 
       if (needed === 0) continue;
-
       if (!grouped[key]) grouped[key] = {};
       if (!grouped[key][parsed.unit]) grouped[key][parsed.unit] = 0;
       grouped[key][parsed.unit] += needed;
     }
 
-    // Build readable shopping list
     const shoppingLines = [];
     for (const name of Object.keys(grouped).sort()) {
       shoppingLines.push(`\n${name.charAt(0).toUpperCase() + name.slice(1)}:`);
