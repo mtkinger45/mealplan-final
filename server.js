@@ -14,17 +14,12 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CACHE_DIR = './cache';
 
 app.use(cors({
-  origin: function (origin, callback) {
-    const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.warn('[CORS BLOCKED ORIGIN]', origin);
-      callback(new Error('CORS not allowed from this origin'));
-    }
-  },
+  origin: 'https://thechaostoconfidencecollective.com',
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type'],
   credentials: true
 }));
+
 
 app.use(bodyParser.json({ limit: '5mb' }));
 
