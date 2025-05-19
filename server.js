@@ -54,7 +54,11 @@ User Info:
 - Appliances: ${appliances.join(', ') || 'None'}
 - On-hand Ingredients: ${onHandIngredients}
 - Household size: ${people}
-- Calendar Insights: ${calendarInsights || 'None'}
+- Calendar Insights: ${calendarInsights}
+Use this to adjust complexity. On busy days, prioritize:
+• One-pan, slow cooker, or 30-minute meals
+• Fewer ingredients
+• No complicated techniques
 
 ${allergyWarning}
 
@@ -118,6 +122,20 @@ Instructions:
       }
     }
 
+    function simplifyIngredient(line) {
+      return line
+        .toLowerCase()
+        .replace(/\(.*?\)/g, '')
+        .replace(/approximately|about|each|medium-sized|large|small|trimmed|cleaned|sliced|diced|ends|halved|for serving/gi, '')
+        .replace(/[^a-zA-Z0-9\s\-.,]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    const simplifiedIngredients = Array.from(new Set(
+      rawIngredients.map(simplifyIngredient)
+    ));
+
     const cleanedShoppingRes = await openai.chat.completions.create({
       model: 'gpt-4',
       messages: [
@@ -130,7 +148,7 @@ Please consolidate duplicates, convert units where helpful (e.g., tbsp to cups),
 If there are ingredients listed with the same name but different units, attempt to merge or clarify. Keep the format clean and human-readable.
 
 Here’s the list:
-${rawIngredients.map(i => '- ' + i).join('\n')}
+${simplifiedIngredients.map(i => '- ' + i).join('\n')}
 `
         }
       ],
