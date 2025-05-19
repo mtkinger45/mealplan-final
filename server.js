@@ -13,20 +13,18 @@ const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CACHE_DIR = './cache';
 
-app.use((req, res, next) => {
-  const allowedOrigin = 'https://thechaostoconfidencecollective.com';
-  res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Origin, Content-Type, Accept');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-
-  next();
-});
-
+app.use(cors({
+  origin: function (origin, callback) {
+    const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn('[CORS BLOCKED ORIGIN]', origin);
+      callback(new Error('CORS not allowed from this origin'));
+    }
+  },
+  credentials: true
+}));
 
 app.use(bodyParser.json({ limit: '5mb' }));
 
@@ -34,123 +32,287 @@ function stripFormatting(text) {
   return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*/g, '');
 }
 
-function normalizeName(name) {
-  return name.toLowerCase()
-    .replace(/\b(of|and|into|thinly|sliced|chopped|grated|shredded|mediumsized|large|small|boneless|skinless|smoked|whole|fresh|cut|peeled|halved|zested|juiced)\b/g, '')
-    .replace(/[^a-zA-Z ]/g, '')
+function parseStructuredIngredients(text) {
+  const matches = text.match(/\*\*Ingredients:\*\*[\s\S]*?(?=\*\*Instructions:|\*\*Prep Time|\*\*Macros|---|$)/g) || [];
+  const items = [];
+  for (const block of matches) {
+    const lines = block.split('\n').slice(1);
+    for (const line of lines) {
+      const clean = line.replace(/^[-•]\s*/, '').trim();
+      if (!clean || /to taste|optional/i.test(clean)) continue;
+      const match = clean.match(/(\d+(?:\.\d+)?)(?:\s+)?([a-zA-Z]+)?\s+(.+)/);
+      if (match) {
+        const [, qty, unit, name] = match;
+        items.push({ name: normalizeIngredient(name), unit: normalizeUnit(unit), qty: parseFloat(qty) });
+      } else {
+        items.push({ name: normalizeIngredient(clean), unit: '', qty: 1 });
+      }
+    }
+  }
+  return items;
+}
+
+function normalizeIngredient(name) {
+  return name
+    .toLowerCase()
+    .replace(/\(.*?\)/g, '')
+    .replace(/\b(fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|to taste|as needed|coarsely|finely|halved|juiced|zest|drained|shredded|grated|boneless|skinless|low-sodium|lowfat|for garnish)\b/gi, '')
+    .replace(/[^a-zA-Z\s]/g, '')
+    .replace(/\bof\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\blemon juice\b.*$/, 'lemon juice')
+    .replace(/\bcheddar cheese\b.*$/, 'cheddar cheese')
+    .replace(/\bwhole milk\b.*$/, 'milk')
+    .replace(/\begg[s]?\b.*$/, 'eggs')
+    .replace(/\bonion[s]?\b.*$/, 'onions')
+    .replace(/\bpepper[s]?\b.*$/, 'peppers');
+}
+
+function normalizeUnit(unit = '') {
+  const u = unit.toLowerCase();
+  if (["cup", "cups"].includes(u)) return "cups";
+  if (["tbsp", "tablespoon", "tablespoons"].includes(u)) return "tbsp";
+  if (["tsp", "teaspoon", "teaspoons"].includes(u)) return "tsp";
+  if (["oz", "ounce", "ounces"].includes(u)) return "oz";
+  if (["lb", "lbs", "pound", "pounds"].includes(u)) return "lbs";
+  if (["clove", "cloves"].includes(u)) return "cloves";
+  if (["slice", "slices"].includes(u)) return "slices";
+  if (["egg", "eggs"].includes(u)) return "eggs";
+  return u;
+}
+
+function categorizeIngredient(name) {
+  const i = name.toLowerCase();
+  if (/lemon|lime|avocado|olive/.test(i)) return 'Fruit';
+  if (/beef|ribeye|sirloin|steak|chuck|ground/.test(i)) return 'Meat';
+  if (/chicken|thigh|breast|drumstick/.test(i)) return 'Meat';
+  if (/pork|bacon|ham|sausage/.test(i)) return 'Meat';
+  if (/fish|salmon|tilapia|cod|shrimp/.test(i)) return 'Meat';
+  if (/egg/.test(i)) return 'Dairy';
+  if (/milk|cream|cheese/.test(i)) return 'Dairy';
+  if (/lettuce|spinach|zucchini|broccoli|onion|pepper|cucumber|radish|mushroom|cauliflower|tomato|peas|green beans|asparagus|cabbage/.test(i)) return 'Produce';
+  if (/butter|ghee|oil|olive|vinegar|sugar/.test(i)) return 'Pantry';
+  return 'Other';
+}
+
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// server.js
+import express from 'express';
+import bodyParser from 'body-parser';
+import cors from 'cors';
+import { createPdfFromText, uploadPdfToS3 } from './pdf.js';
+import OpenAI from 'openai';
+import { randomUUID } from 'crypto';
+import fs from 'fs/promises';
+import path from 'path';
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const CACHE_DIR = './cache';
+
+app.use(cors({
+  origin: function (origin, callback) {
+    const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn('[CORS BLOCKED ORIGIN]', origin);
+      callback(new Error('CORS not allowed from this origin'));
+    }
+  },
+  credentials: true
+}));
+
+app.use(bodyParser.json({ limit: '5mb' }));
+
+function stripFormatting(text) {
+  return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*/g, '');
+}
+
+const unitConversion = {
+  tbsp: { to: 'cups', factor: 1 / 16 },
+  tsp: { to: 'cups', factor: 1 / 48 },
+  oz: { to: 'cups', factor: 1 / 8 },
+  cups: { to: 'cups', factor: 1 },
+  cloves: { to: 'clove', factor: 1 },
+  pounds: { to: 'lb', factor: 1 },
+  lbs: { to: 'lb', factor: 1 },
+  cup: { to: 'cups', factor: 1 },
+  tablespoons: { to: 'tbsp', factor: 1 },
+  teaspoons: { to: 'tsp', factor: 1 },
+};
+
+function normalizeUnit(unit = '') {
+  const u = unit.toLowerCase();
+  return unitConversion[u]?.to || u;
+}
+function overrideUnitForIngredient(name, originalUnit) {
+  if (name === 'ribeye steak') return 'lb';
+  if (name === 'chicken breasts') return 'lb';
+  if (name === 'shrimp') return 'lb';
+  return normalizeUnit(originalUnit);
+}
+
+function normalizeIngredient(name) {
+  const cleaned = name
+    .toLowerCase()
+    .replace(/\(.*?\)/g, '')
+    .replace(/\b(fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|to taste|as needed|coarsely|finely|halved|juiced|zest(ed)?|drained|shredded|grated|boneless|bonein|skinless|low-sodium|lowfat|cubed|peeled|cut into.*|for garnish(?:ing)?|approximately.*|deveined|raw)\b/gi, '')
+    .replace(/[^a-zA-Z\s]/g, '')
+    .replace(/\bof\b/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+
+  return cleaned
+    .replace(/extra virgin olive oil|olive oil.*/g, 'olive oil')
+    .replace(/butter.*/, 'butter')
+    .replace(/unsalted butter/, 'butter')
+    .replace(/melted butter/, 'butter')
+    .replace(/garlic.*/, 'garlic')
+    .replace(/parsley.*/, 'parsley')
+    .replace(/soy sauce.*/, 'soy sauce')
+    .replace(/apple cider vinegar.*/, 'apple cider vinegar')
+    .replace(/black pepper.*/, 'black pepper')
+    .replace(/bell pepper.*/, 'bell pepper')
+    .replace(/green onion.*/, 'green onion')
+    .replace(/scallion.*/, 'green onion')
+    .replace(/ribeye.*|lean beef.*|steaks.*|steak.*/g, 'ribeye steak')
+    .replace(/fish fillet.*/g, 'fish fillets')
+    .replace(/salmon.*/, 'fish')
+    .replace(/white fish.*/, 'fish')
+    .replace(/shrimp.*/, 'shrimp')
+    .replace(/carrots.*/, 'carrots')
+    .replace(/lemon juice|lemon slices and herbs|lemons? zested and.*|lemons?|lemon.*/g, 'lemon')
+    .replace(/limes?|lime juice.*/g, 'lime')
+    .replace(/chicken breast.*/g, 'chicken breasts')
+    .replace(/chickens?.*/, 'chicken');
 }
 
-function normalizeAndParseIngredient(line) {
-  const clean = line.toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-zA-Z0-9\s.]/g, '').replace(/\s+/g, ' ').trim();
-  const match = clean.match(/^(\d+(?:\.\d+)?)(?:\s+)?([a-zA-Z]+)?\s+(.*)$/);
-  if (!match) return null;
-  const [, qtyStr, unitRaw, nameRaw] = match;
-  const qty = parseFloat(qtyStr);
-  const unit = (unitRaw || '').toLowerCase();
-  const name = normalizeName(nameRaw);
-  return { name, qty, unit };
+function parseStructuredIngredients(text) {
+  const matches = text.match(/\*\*Ingredients:\*\*[\s\S]*?(?=\*\*Instructions:|\*\*Prep Time|---|$)/g) || [];
+  const items = [];
+  for (const block of matches) {
+    const lines = block.split('\n').slice(1);
+    for (const line of lines) {
+      const clean = line.replace(/^[-•]\s*/, '').trim();
+      if (!clean || /to taste|optional/i.test(clean)) continue;
+      const match = clean.match(/(\d+(?:\.\d+)?)(?:\s+)?([a-zA-Z]+)?\s+(.+)/);
+      if (match) {
+        const [, qty, unit, name] = match;
+        items.push({ name: normalizeIngredient(name), unit: normalizeUnit(unit), qty: parseFloat(qty) });
+      } else {
+        items.push({ name: normalizeIngredient(clean), unit: '', qty: 1 });
+      }
+    }
+  }
+  return items;
 }
 
-function parseOnHandMap(text) {
+function categorizeIngredient(name) {
+  const i = name.toLowerCase();
+  if (/lemon|lime|avocado|olive/.test(i)) return 'Fruit';
+  if (/beef|ribeye|sirloin|steak|chuck|ground/.test(i)) return 'Meat';
+  if (/chicken|thigh|breast|drumstick/.test(i)) return 'Meat';
+  if (/pork|bacon|ham|sausage/.test(i)) return 'Meat';
+  if (/fish|salmon|tilapia|cod|shrimp/.test(i)) return 'Meat';
+  if (/egg/.test(i)) return 'Dairy';
+  if (/milk|cream|cheese/.test(i)) return 'Dairy';
+  if (/lettuce|spinach|zucchini|broccoli|onion|pepper|cucumber|radish|mushroom|cauliflower|tomato|peas|green beans|asparagus|cabbage/.test(i)) return 'Produce';
+  if (/butter|ghee|oil|vinegar|sugar/.test(i)) return 'Pantry';
+  return 'Other';
+}
+
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function adjustForOnHand(aggregated, onHandMap) {
+  for (const key in aggregated) {
+    const item = aggregated[key];
+    const onHandQty = onHandMap[item.name] || 0;
+    item.qty = Math.max(item.qty - onHandQty, 0);
+  }
+}
+
+function buildOnHandMap(rawList) {
   const map = {};
-  const lines = text.split(/\n|,/);
-  for (const line of lines) {
-    const parsed = normalizeAndParseIngredient(line.trim());
-    if (parsed) {
-      const key = parsed.name + '|' + parsed.unit;
-      map[key] = (map[key] || 0) + parsed.qty;
+  for (const line of rawList) {
+    const match = line.trim().match(/(\d+(?:\.\d+)?)\s+(.+)/);
+    if (match) {
+      const [, qty, name] = match;
+      const cleaned = normalizeIngredient(name);
+      map[cleaned] = parseFloat(qty);
     }
   }
   return map;
 }
 
-function categorizeIngredient(name) {
-  const i = name.toLowerCase();
-  if (/lemon|lime|avocado|zucchini|tomato|onion|garlic|pepper|mushroom|cucumber|carrot|broccoli|spinach|lettuce|peas|green beans|asparagus|cabbage|cauliflower/.test(i)) return 'Produce';
-  if (/beef|chicken|turkey|bacon|steak|pork|fish|ribeye/.test(i)) return 'Meat';
-  if (/milk|cheese|egg|butter|cream|yogurt/.test(i)) return 'Dairy';
-  if (/oil|vinegar|sugar|flour|baking|yeast|spice|salt|pepper|herb|cornstarch|broth|syrup/.test(i)) return 'Pantry';
-  return 'Other';
-}
-
-
-
-
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
     const sessionId = randomUUID();
-    console.log('[REQUEST]', JSON.stringify(data, null, 2));
-
     const {
       duration = 7, startDay = 'Monday', meals = ['Supper'], dietType = 'Any', dietaryPreferences = 'None',
-      mealStyle = 'Any', cookingRequests = 'None', appliances = [], onHandIngredients = '',
-      calendarInsights = '', people = 4, name = 'Guest'
+      mealStyle = 'Any', cookingRequests = 'None', appliances = [], onHandIngredients = 'None',
+      calendarInsights = 'None', people = 4, name = 'Guest'
     } = data;
 
     const allergyWarning = dietaryPreferences.toLowerCase().includes('shellfish')
-      ? '⚠️ This user is allergic to shellfish. DO NOT include shrimp, crab, lobster, or any shellfish.'
+      ? '⚠️ User may be allergic to shellfish. ABSOLUTELY DO NOT include shrimp, crab, lobster, clams, or shellfish of any kind.'
       : '';
 
-    const planPrompt = `You are a professional meal planner. Create a ${duration}-day meal plan starting on ${startDay}.
-Include ONLY these meals per day: ${meals.join(', ')}.
+    const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}.
 User Info:
-- Diet: ${dietType}
+- Diet Type: ${dietType}
 - Preferences: ${dietaryPreferences}
 - Cooking Style: ${mealStyle}
 - Special Requests: ${cookingRequests}
 - Appliances: ${appliances.join(', ') || 'None'}
-- Household Size: ${people}
-- Calendar Notes: ${calendarInsights}
+- On-hand Ingredients: ${onHandIngredients}
+- Household size: ${people}
+- Calendar Insights: ${calendarInsights || 'None'}
+
 ${allergyWarning}
 
 Instructions:
-- Output a JSON array only, listing each meal: { "day": "Monday", "meal": "Supper", "title": "Grilled Chicken with Veggies" }
-- No meal titles should repeat across days.
-- After JSON, include a simple shopping list grouped by category.`;
+- Use ${startDay} as the first day
+- Respect all dietary preferences
+- End with a shopping list grouped by category and subtract on-hand items
+- Include a JSON array of all meals with day, meal type, and title`;
 
-    const planRes = await openai.chat.completions.create({
+    const mealPlanRes = await openai.chat.completions.create({
       model: 'gpt-4',
       messages: [
         { role: 'system', content: 'You are a professional meal planner.' },
-        { role: 'user', content: planPrompt }
+        { role: 'user', content: prompt }
       ],
       temperature: 0.7,
       max_tokens: 3000
     });
 
-    const fullResponse = planRes.choices?.[0]?.message?.content || '';
-    console.log('[GPT PLAN OUTPUT]', fullResponse.slice(0, 600));
-
-    const [mealPlanText] = fullResponse.split(/(?=Shopping List)/i);
-    const jsonMatch = mealPlanText.match(/\[.*\]/s);
+    const result = mealPlanRes.choices?.[0]?.message?.content || '';
+    const [mealPlanPart] = result.split(/(?=Shopping List)/i);
+    const jsonMatch = result.match(/\[.*\]/s);
     let recipeInfoList = [];
-
     if (jsonMatch) {
-      try {
-        recipeInfoList = JSON.parse(jsonMatch[0]);
-      } catch (e) {
-        console.error('[JSON PARSE ERROR]', e.message, '\nRaw JSON:', jsonMatch[0]);
-        return res.status(500).json({ error: 'Invalid meal plan format from GPT.' });
-      }
+      try { recipeInfoList = JSON.parse(jsonMatch[0]); } catch (e) { console.error('[JSON PARSE ERROR]', e); }
     }
+    if (!recipeInfoList.length) throw new Error('Recipe list is empty — unable to generate meal plan.');
 
-    if (!recipeInfoList.length) {
-      console.error('[ERROR] No valid meals returned.');
-      return res.status(500).json({ error: 'Meal plan returned no meals.' });
-    }
-
-    const recipeTasks = recipeInfoList.map(({ day, meal, title }) => {
-      const prompt = `You are a recipe writer. Write a recipe for the following:
+    const tasks = recipeInfoList.map(({ day, meal, title }) => {
+      const prompt = `You are a professional recipe writer. Create a recipe with the following format.
 **Meal Name:** ${day} ${meal} – ${title}
-**Ingredients:** List for ${people} people using U.S. measurements.
-- Each line should be: "X unit item"
-**Instructions:** Step-by-step cooking directions.
+**Ingredients:**
+- list each ingredient with quantity for ${people} people in U.S. measurements
+**Instructions:**
+1. step-by-step instructions
 **Prep Time:** X minutes
-**Macros:** Protein, Fat, Carbs.`;
-
+**Macros:** Protein, Fat, Carbs`;
       return openai.chat.completions.create({
         model: 'gpt-4',
         messages: [
@@ -159,89 +321,59 @@ Instructions:
         ],
         temperature: 0.7,
         max_tokens: 1000
-      }).then(r => r.choices?.[0]?.message?.content?.trim() || '');
+      }).then(c => c.choices?.[0]?.message?.content?.trim() || '');
     });
 
-    const recipeOutputs = await Promise.all(recipeTasks);
-    const recipesByDay = recipeInfoList.map((entry, i) => ({
-      ...entry,
-      fullText: recipeOutputs[i]
-    }));
+    const outputs = await Promise.all(tasks);
+    const recipes = outputs.join('\n\n---\n\n');
 
-    const combinedRecipes = recipesByDay.map(r =>
-      `**Meal Name:** ${r.day} ${r.meal} – ${r.title}\n${r.fullText}`
-    ).join('\n\n---\n\n');
-
-    const rawIngredients = [];
-    const recipeSections = combinedRecipes.match(/\*\*Ingredients:\*\*[\s\S]*?(?=\*\*Instructions:|\*\*Prep Time|---|$)/g) || [];
-
-    for (const block of recipeSections) {
-      const lines = block.split('\n').slice(1);
-      for (const line of lines) {
-        const clean = line.replace(/^[-•]\s*/, '').trim();
-        if (clean && !/to taste|optional/i.test(clean)) rawIngredients.push(clean);
-      }
+    const structuredIngredients = parseStructuredIngredients(recipes);
+    const aggregated = {};
+    for (const { name, qty, unit } of structuredIngredients) {
+      if (!name || isNaN(qty)) continue;
+      const normName = normalizeIngredient(name);
+      const baseUnit = overrideUnitForIngredient(normName, unit);
+      const key = `${normName}|${baseUnit}`;
+      const factor = unitConversion[unit?.toLowerCase()]?.factor || 1;
+      const convertedQty = qty * factor;
+      if (!aggregated[key]) aggregated[key] = { name: normName, qty: 0, unit: baseUnit };
+      aggregated[key].qty += convertedQty;
     }
 
-    const onHandMap = parseOnHandMap(onHandIngredients);
-    const grouped = {};
-
-    for (const line of rawIngredients) {
-      const parsed = normalizeAndParseIngredient(line);
-      if (!parsed || isNaN(parsed.qty)) continue;
-      const key = parsed.name;
-      const fullKey = parsed.name + '|' + parsed.unit;
-      const available = onHandMap[fullKey] || 0;
-      const needed = Math.max(parsed.qty - available, 0);
-      if (needed === 0) continue;
-      if (!grouped[key]) grouped[key] = {};
-      if (!grouped[key][parsed.unit]) grouped[key][parsed.unit] = 0;
-      grouped[key][parsed.unit] += needed;
-    }
-
+    const onHandLines = data.onHandIngredients?.toLowerCase().split(/\n|,/) || [];
+    const onHandMap = buildOnHandMap(onHandLines);
+    adjustForOnHand(aggregated, onHandMap);
     const categorized = {};
-    for (const name of Object.keys(grouped)) {
+    Object.values(aggregated).forEach(({ name, qty, unit }) => {
       const cat = categorizeIngredient(name);
-      if (!categorized[cat]) categorized[cat] = {};
-      categorized[cat][name] = grouped[name];
+      if (!categorized[cat]) categorized[cat] = [];
+      const label = `${capitalize(name)}: ${qty} ${unit}`;
+      categorized[cat].push(label);
+    });
+
+    let rebuiltShoppingList = '';
+    for (const category of Object.keys(categorized).sort()) {
+      rebuiltShoppingList += `\n${category}:\n`;
+      for (const i of categorized[category].sort()) rebuiltShoppingList += `• ${i}\n`;
     }
 
-    const listLines = [];
-    for (const cat of Object.keys(categorized).sort()) {
-      listLines.push(`\n<b>${cat}</b>`);
-      const ingredients = categorized[cat];
-      for (const name of Object.keys(ingredients).sort()) {
-        listLines.push(`${name.charAt(0).toUpperCase() + name.slice(1)}:`);
-        for (const unit of Object.keys(ingredients[name])) {
-          const qty = ingredients[name][unit];
-          listLines.push(`• ${qty}${unit ? ' ' + unit : ''}`);
-        }
-      }
-    }
-
-    const rebuiltShoppingList = listLines.join('\n');
-    console.log('[SHOPPING LIST]', rebuiltShoppingList.slice(0, 300));
-
-    
-    
-    
-        await fs.mkdir(CACHE_DIR, { recursive: true });
+    await fs.mkdir(CACHE_DIR, { recursive: true });
     await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify({
-      name: name || 'Guest',
-      mealPlan: stripFormatting(mealPlanText.trim()),
+      name: data.name || 'Guest',
+      mealPlan: stripFormatting(mealPlanPart.trim()),
       shoppingList: rebuiltShoppingList.trim(),
-      recipes: combinedRecipes
+      recipes
     }, null, 2));
 
     res.json({
       sessionId,
-      mealPlan: stripFormatting(mealPlanText.trim()),
+      mealPlan: stripFormatting(mealPlanPart.trim()),
       shoppingList: rebuiltShoppingList.trim(),
-      recipes: combinedRecipes
+      recipes
     });
   } catch (err) {
-    console.error('[MEALPLAN ROUTE ERROR]', err.stack || err.message || err);
-    res.status(500).json({ error: 'Meal plan generation failed. Check server logs for details.' });
+    console.error('[API ERROR]', err);
+    res.status(500).json({ error: 'Meal plan generation failed.' });
   }
 });
 
@@ -249,12 +381,9 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
   const { sessionId } = req.params;
   const { type } = req.query;
   const filePath = path.join('./cache', `${sessionId}.json`);
-
   try {
     const cache = JSON.parse(await fs.readFile(filePath, 'utf-8'));
-
-    let content = '';
-    let filename = '';
+    let content = '', filename = '';
     if (type === 'mealplan') {
       content = `Meal Plan for ${cache.name}\n\n${cache.mealPlan}`;
       filename = `${sessionId}-mealplan.pdf`;
@@ -267,14 +396,18 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
     } else {
       return res.status(400).json({ error: 'Invalid type parameter.' });
     }
-
     const buffer = await createPdfFromText(content, { type });
     const url = await uploadPdfToS3(buffer, filename);
     res.json({ url });
   } catch (err) {
-    console.error('[PDF EXPORT ERROR]', err.message);
+    console.error('[PDF ERROR]', err);
     res.status(500).json({ error: 'Failed to generate PDF.' });
   }
 });
 
-app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+
+
+
+
