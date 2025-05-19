@@ -14,12 +14,19 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CACHE_DIR = './cache';
 
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'https://thechaostoconfidencecollective.com');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, Content-Type, Accept');
-  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  const allowedOrigin = 'https://thechaostoconfidencecollective.com';
+  res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, Content-Type, Accept');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+
   next();
 });
+
 
 app.use(bodyParser.json({ limit: '5mb' }));
 
