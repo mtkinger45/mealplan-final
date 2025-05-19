@@ -131,7 +131,7 @@ app.post('/api/mealplan', async (req, res) => {
       calendarInsights = 'None', people = 4, name = 'Guest'
     } = data;
 
-    const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}. Do not include any other meals (e.g., skip Supper if it's not listed).
+    const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}.
 User Info:
 - Diet Type: ${dietType}
 - Preferences: ${dietaryPreferences}
@@ -144,9 +144,9 @@ User Info:
 
 Instructions:
 - Use ${startDay} as the first day
-- Respect all dietary preferences (e.g., do not include shellfish if avoided)
+- Respect all dietary preferences
 - End with a shopping list grouped by category and subtract on-hand items
-- Include a JSON array of all meals with day, meal type, and title (for recipe lookup)`;
+- Include a JSON array of all meals with day, meal type, and title`;
 
     const mealPlanRes = await openai.chat.completions.create({
       model: 'gpt-4',
@@ -171,7 +171,7 @@ Instructions:
       const prompt = `You are a professional recipe writer. Create a recipe with the following format.
 **Meal Name:** ${day} ${meal} – ${title}
 **Ingredients:**
-- list each ingredient with quantity for ${people} people in U.S. measurements (e.g., cups, oz, tbsp)
+- list each ingredient with quantity for ${people} people in U.S. measurements
 **Instructions:**
 1. step-by-step instructions
 **Prep Time:** X minutes
@@ -231,3 +231,33 @@ Instructions:
     res.status(500).json({ error: 'Meal plan generation failed.' });
   }
 });
+
+app.get('/api/pdf/:sessionId', async (req, res) => {
+  const { sessionId } = req.params;
+  const { type } = req.query;
+  const filePath = path.join('./cache', `${sessionId}.json`);
+  try {
+    const cache = JSON.parse(await fs.readFile(filePath, 'utf-8'));
+    let content = '', filename = '';
+    if (type === 'mealplan') {
+      content = `Meal Plan for ${cache.name}\n\n${cache.mealPlan}`;
+      filename = `${sessionId}-mealplan.pdf`;
+    } else if (type === 'recipes') {
+      content = cache.recipes;
+      filename = `${sessionId}-recipes.pdf`;
+    } else if (type === 'shopping-list') {
+      content = cache.shoppingList;
+      filename = `${sessionId}-shopping.pdf`;
+    } else {
+      return res.status(400).json({ error: 'Invalid type parameter.' });
+    }
+    const buffer = await createPdfFromText(content, { type });
+    const url = await uploadPdfToS3(buffer, filename);
+    res.json({ url });
+  } catch (err) {
+    console.error('[PDF ERROR]', err);
+    res.status(500).json({ error: 'Failed to generate PDF.' });
+  }
+});
+
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
