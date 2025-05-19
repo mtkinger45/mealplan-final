@@ -96,6 +96,28 @@ function categorizeIngredient(name) {
   return 'Other';
 }
 
+function adjustForOnHand(aggregated, onHandMap) {
+  for (const key in aggregated) {
+    const item = aggregated[key];
+    const onHandQty = onHandMap[item.name] || 0;
+    item.qty = Math.max(item.qty - onHandQty, 0);
+  }
+}
+
+function buildOnHandMap(rawList) {
+  const map = {};
+  for (const line of rawList) {
+    const match = line.trim().match(/(\d+(?:\.\d+)?)\s+(.+)/);
+    if (match) {
+      const [, qty, name] = match;
+      const cleaned = normalizeIngredient(name);
+      map[cleaned] = parseFloat(qty);
+    }
+  }
+  return map;
+}
+
+
 function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
@@ -212,9 +234,12 @@ Instructions:
       aggregated[key].qty += qty;
     }
 
-    const categorized = {};
-    const onHandList = data.onHandIngredients?.toLowerCase().split(/\n|,/) || [];
-    const onHandUsed = [];
+    const onHandLines = data.onHandIngredients?.toLowerCase().split(/\n|,/) || [];
+const onHandMap = buildOnHandMap(onHandLines);
+adjustForOnHand(aggregated, onHandMap);
+
+const categorized = {};
+
 
     Object.values(aggregated).forEach(({ name, qty, unit }) => {
       const cat = categorizeIngredient(name);
