@@ -32,6 +32,7 @@ function stripFormatting(text) {
   return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*/g, '');
 }
 
+// Ingredient parsing + cleaning
 function normalizeAndParseIngredient(line) {
   const original = line.toLowerCase();
   const clean = original
@@ -47,11 +48,24 @@ function normalizeAndParseIngredient(line) {
   const qty = parseFloat(qtyStr);
   const unit = (unitRaw || '').toLowerCase();
   const name = nameRaw
-    .replace(/approximately|about|each|medium|large|small|boneless|skinless|trimmed|cleaned|sliced|diced|ends|halved|zested|juiced|of|oz|ounces|inch|fillet|steak|strips?/gi, '')
+    .replace(/approximately|about|each|medium|large|small|boneless|skinless|trimmed|cleaned|sliced|diced|ends|halved|zested|juiced|grilled|beaten|leftover|cut into.*|thickcut|for serving/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
 
   return { name, qty, unit };
+}
+
+function parseOnHandMap(text) {
+  const map = {};
+  const lines = text.split(/\n|,/);
+  for (const line of lines) {
+    const parsed = normalizeAndParseIngredient(line.trim());
+    if (parsed) {
+      const key = parsed.name;
+      map[key] = (map[key] || 0) + parsed.qty;
+    }
+  }
+  return map;
 }
 app.post('/api/mealplan', async (req, res) => {
   try {
@@ -59,8 +73,8 @@ app.post('/api/mealplan', async (req, res) => {
     const sessionId = randomUUID();
     const {
       duration = 7, startDay = 'Monday', meals = ['Supper'], dietType = 'Any', dietaryPreferences = 'None',
-      mealStyle = 'Any', cookingRequests = 'None', appliances = [], onHandIngredients = 'None',
-      calendarInsights = 'None', people = 4, name = 'Guest'
+      mealStyle = 'Any', cookingRequests = 'None', appliances = [], onHandIngredients = '',
+      calendarInsights = '', people = 4, name = 'Guest'
     } = data;
 
     const allergyWarning = dietaryPreferences.toLowerCase().includes('shellfish')
@@ -144,13 +158,18 @@ Instructions:
       }
     }
 
+    // Parse on-hand ingredients
+    const onHandMap = parseOnHandMap(onHandIngredients);
     const merged = {};
     for (const line of rawIngredients) {
       const parsed = normalizeAndParseIngredient(line);
       if (!parsed || isNaN(parsed.qty)) continue;
       const key = parsed.name;
-      if (!merged[key]) merged[key] = { ...parsed };
-      else merged[key].qty += parsed.qty;
+      const available = onHandMap[key] || 0;
+      const needed = Math.max(parsed.qty - available, 0);
+
+      if (!merged[key]) merged[key] = { name: key, qty: 0, unit: parsed.unit };
+      merged[key].qty += needed;
     }
 
     const mergedListForGpt = Object.values(merged).map(item => {
