@@ -96,6 +96,10 @@ function categorizeIngredient(name) {
   return 'Other';
 }
 
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
 function adjustForOnHand(aggregated, onHandMap) {
   for (const key in aggregated) {
     const item = aggregated[key];
@@ -117,11 +121,7 @@ function buildOnHandMap(rawList) {
   return map;
 }
 
-
-function capitalize(str) {
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
+// You can now continue this file with your full API route logic using these helpers
 function groupByCategory(ingredients, onHandItems = []) {
   const grouped = {};
   const onHandUsed = [];
@@ -234,12 +234,9 @@ Instructions:
       aggregated[key].qty += qty;
     }
 
-    const onHandLines = data.onHandIngredients?.toLowerCase().split(/\n|,/) || [];
-const onHandMap = buildOnHandMap(onHandLines);
-adjustForOnHand(aggregated, onHandMap);
-
-const categorized = {};
-
+    const categorized = {};
+    const onHandList = data.onHandIngredients?.toLowerCase().split(/\n|,/) || [];
+    const onHandUsed = [];
 
     Object.values(aggregated).forEach(({ name, qty, unit }) => {
       const cat = categorizeIngredient(name);
@@ -304,3 +301,4 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
