@@ -67,9 +67,15 @@ function categorizeIngredient(name) {
   if (/oil|vinegar|sugar|flour|baking|yeast|spice|salt|pepper|herb|cornstarch|broth|syrup/.test(i)) return 'Pantry';
   return 'Other';
 }
+
+
+
+
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
+    console.log('[REQUEST RECEIVED]', JSON.stringify(data, null, 2));
+
     const sessionId = randomUUID();
     const {
       duration = 7, startDay = 'Monday', meals = ['Supper'], dietType = 'Any', dietaryPreferences = 'None',
@@ -107,13 +113,25 @@ Instructions:
     });
 
     const result = mealPlanRes.choices?.[0]?.message?.content || '';
+    console.log('[RAW GPT PLAN OUTPUT]', result.slice(0, 500));
+
     const [mealPlanPart] = result.split(/(?=Shopping List)/i);
     const jsonMatch = result.match(/\[.*\]/s);
     let recipeInfoList = [];
+
     if (jsonMatch) {
-      try { recipeInfoList = JSON.parse(jsonMatch[0]); } catch (e) { console.error('[JSON PARSE ERROR]', e); }
+      try {
+        recipeInfoList = JSON.parse(jsonMatch[0]);
+      } catch (e) {
+        console.error('[JSON PARSE ERROR]', e.message, '\nRaw JSON:', jsonMatch[0]);
+        return res.status(500).json({ error: 'Failed to parse meal plan JSON from GPT.' });
+      }
     }
-    if (!recipeInfoList.length) throw new Error('Meal plan JSON missing.');
+
+    if (!recipeInfoList.length) {
+      console.error('[NO RECIPES FOUND]');
+      return res.status(500).json({ error: 'Meal plan returned empty or malformed JSON array.' });
+    }
 
     const tasks = recipeInfoList.map(({ day, meal, title }) => {
       const prompt = `You are a recipe writer. Generate a recipe:
@@ -172,7 +190,6 @@ Instructions:
       grouped[key][parsed.unit] += needed;
     }
 
-    // Categorize and format
     const categorized = {};
     for (const name of Object.keys(grouped)) {
       const cat = categorizeIngredient(name);
@@ -194,6 +211,11 @@ Instructions:
     }
 
     const rebuiltShoppingList = lines.join('\n');
+    console.log('[SHOPPING LIST]', rebuiltShoppingList.slice(0, 500));
+
+    
+    
+    
     await fs.mkdir(CACHE_DIR, { recursive: true });
     await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify({
       name: data.name || 'Guest',
