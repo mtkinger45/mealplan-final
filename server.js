@@ -252,8 +252,13 @@ Instructions:
     let rebuiltShoppingList = '';
     for (const category of Object.keys(categorized).sort()) {
       rebuiltShoppingList += `\n${category}:\n`;
-      for (const i of categorized[category].sort()) rebuiltShoppingList += `• ${i}\n`;
-    }
+      const sortedItems = categorized[category].slice().sort((a, b) =>
+  a.toLowerCase().localeCompare(b.toLowerCase())
+);
+for (const item of sortedItems) {
+  rebuiltShoppingList += `• ${item}\n`;
+}
+
 
     await fs.mkdir(CACHE_DIR, { recursive: true });
     await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify({
