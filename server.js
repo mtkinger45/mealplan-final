@@ -49,6 +49,12 @@ function normalizeUnit(unit = '') {
   const u = unit.toLowerCase();
   return unitConversion[u]?.to || u;
 }
+function overrideUnitForIngredient(name, originalUnit) {
+  if (name === 'ribeye steak') return 'lb';
+  if (name === 'chicken breasts') return 'lb';
+  if (name === 'shrimp') return 'lb';
+  return normalizeUnit(originalUnit);
+}
 
 function normalizeIngredient(name) {
   const cleaned = name
@@ -73,7 +79,7 @@ function normalizeIngredient(name) {
     .replace(/bell pepper.*/, 'bell pepper')
     .replace(/green onion.*/, 'green onion')
     .replace(/scallion.*/, 'green onion')
-    .replace(/ribeye.*|steaks.*|steak.*/g, 'ribeye steak')
+    .replace(/ribeye.*|lean beef.*|steaks.*|steak.*/g, 'ribeye steak')
     .replace(/fish fillet.*/g, 'fish fillets')
     .replace(/salmon.*/, 'fish')
     .replace(/white fish.*/, 'fish')
@@ -84,6 +90,7 @@ function normalizeIngredient(name) {
     .replace(/chicken breast.*/g, 'chicken breasts')
     .replace(/chickens?.*/, 'chicken');
 }
+
 function parseStructuredIngredients(text) {
   const matches = text.match(/\*\*Ingredients:\*\*[\s\S]*?(?=\*\*Instructions:|\*\*Prep Time|---|$)/g) || [];
   const items = [];
@@ -223,7 +230,7 @@ Instructions:
     for (const { name, qty, unit } of structuredIngredients) {
       if (!name || isNaN(qty)) continue;
       const normName = normalizeIngredient(name);
-      const baseUnit = normalizeUnit(unit);
+      const baseUnit = overrideUnitForIngredient(normName, unit);
       const key = `${normName}|${baseUnit}`;
       const factor = unitConversion[unit?.toLowerCase()]?.factor || 1;
       const convertedQty = qty * factor;
