@@ -53,34 +53,48 @@ function parseStructuredIngredients(text) {
 }
 
 function normalizeIngredient(name) {
-  return name
+  const cleaned = name
     .toLowerCase()
     .replace(/\(.*?\)/g, '')
-    .replace(/\b(fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|to taste|as needed|coarsely|finely|halved|juiced|zest|drained|shredded|grated|boneless|skinless|low-sodium|lowfat|for garnish)\b/gi, '')
+    .replace(/\b(fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|to taste|as needed|coarsely|finely|halved|juiced|zest|drained|shredded|grated|boneless|skinless|low-sodium|lowfat|cubed|peeled|for garnish(?:ing)?)\b/gi, '')
     .replace(/[^a-zA-Z\s]/g, '')
     .replace(/\bof\b/g, '')
     .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\blemon juice\b.*$/, 'lemon juice')
-    .replace(/\bcheddar cheese\b.*$/, 'cheddar cheese')
-    .replace(/\bwhole milk\b.*$/, 'milk')
-    .replace(/\begg[s]?\b.*$/, 'eggs')
-    .replace(/\bonion[s]?\b.*$/, 'onions')
-    .replace(/\bpepper[s]?\b.*$/, 'peppers');
+    .trim();
+
+  return cleaned
+    .replace(/butter.*/, 'butter')
+    .replace(/unsalted butter/, 'butter')
+    .replace(/melted butter/, 'butter')
+    .replace(/garlic.*/, 'garlic')
+    .replace(/parsley.*/, 'parsley')
+    .replace(/soy sauce.*/, 'soy sauce')
+    .replace(/apple cider vinegar.*/, 'apple cider vinegar')
+    .replace(/basil|oregano|thyme|rosemary/, 'herbs')
+    .replace(/black pepper.*/, 'black pepper')
+    .replace(/bell pepper.*/, 'bell pepper')
+    .replace(/green onion.*/, 'green onion')
+    .replace(/scallion.*/, 'green onion');
 }
+
+
+const unitConversion = {
+  tbsp: { to: 'cups', factor: 1 / 16 },
+  tsp: { to: 'cups', factor: 1 / 48 },
+  oz: { to: 'cups', factor: 1 / 8 },
+  cups: { to: 'cups', factor: 1 },
+  cloves: { to: 'cloves', factor: 1 },
+  bunch: { to: 'bunch', factor: 1 },
+  small: { to: 'small', factor: 1 },
+  large: { to: 'large', factor: 1 }
+};
 
 function normalizeUnit(unit = '') {
   const u = unit.toLowerCase();
-  if (["cup", "cups"].includes(u)) return "cups";
-  if (["tbsp", "tablespoon", "tablespoons"].includes(u)) return "tbsp";
-  if (["tsp", "teaspoon", "teaspoons"].includes(u)) return "tsp";
-  if (["oz", "ounce", "ounces"].includes(u)) return "oz";
-  if (["lb", "lbs", "pound", "pounds"].includes(u)) return "lbs";
-  if (["clove", "cloves"].includes(u)) return "cloves";
-  if (["slice", "slices"].includes(u)) return "slices";
-  if (["egg", "eggs"].includes(u)) return "eggs";
-  return u;
+  return unitConversion[u]?.to || u;
 }
+
+
 
 function categorizeIngredient(name) {
   const i = name.toLowerCase();
@@ -192,12 +206,19 @@ Instructions:
 
     const structuredIngredients = parseStructuredIngredients(recipes);
     const aggregated = {};
-    for (const { name, qty, unit } of structuredIngredients) {
-      if (!name || isNaN(qty)) continue;
-      const key = `${name}|${unit}`;
-      if (!aggregated[key]) aggregated[key] = { name, qty: 0, unit };
-      aggregated[key].qty += qty;
-    }
+for (const { name, qty, unit } of structuredIngredients) {
+  if (!name || isNaN(qty)) continue;
+  const normName = normalizeIngredient(name);
+  const baseUnit = normalizeUnit(unit);
+  const key = `${normName}|${baseUnit}`;
+
+  const factor = unitConversion[unit?.toLowerCase()]?.factor || 1;
+  const convertedQty = qty * factor;
+
+  if (!aggregated[key]) aggregated[key] = { name: normName, qty: 0, unit: baseUnit };
+  aggregated[key].qty += convertedQty;
+}
+
 
     const onHandLines = data.onHandIngredients?.toLowerCase().split(/\n|,/) || [];
     const onHandMap = buildOnHandMap(onHandLines);
