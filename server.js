@@ -71,6 +71,15 @@ function parseOnHandMap(text) {
   }
   return map;
 }
+function categorizeIngredient(name) {
+  const i = name.toLowerCase();
+  if (/lemon|lime|avocado|zucchini|tomato|onion|garlic|pepper|mushroom|cucumber|carrot|broccoli|spinach|lettuce|peas|green beans|asparagus|cabbage|cauliflower/.test(i)) return 'Produce';
+  if (/beef|chicken|turkey|bacon|steak|pork|fish|ribeye/.test(i)) return 'Meat';
+  if (/milk|cheese|egg|butter|cream|yogurt/.test(i)) return 'Dairy';
+  if (/oil|vinegar|sugar|flour|baking|yeast|spice|salt|pepper|herb|cornstarch|broth|syrup/.test(i)) return 'Pantry';
+  return 'Other';
+}
+
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
@@ -95,10 +104,6 @@ User Info:
 - On-hand Ingredients: ${onHandIngredients}
 - Household size: ${people}
 - Calendar Insights: ${calendarInsights}
-Use this to adjust complexity. On busy days, prioritize:
-• One-pan, slow cooker, or 30-minute meals
-• Fewer ingredients
-• No complicated techniques
 
 ${allergyWarning}
 
@@ -157,7 +162,6 @@ Instructions:
       `**Meal Name:** ${r.day} ${r.meal} – ${r.title}\n${r.fullText}`
     ).join('\n\n---\n\n');
 
-    // Extract and parse ingredients
     const rawIngredients = [];
     const recipeSections = recipes.match(/\*\*Ingredients:\*\*[\s\S]*?(?=\*\*Instructions:|\*\*Prep Time|---|$)/g) || [];
     for (const block of recipeSections) {
@@ -180,24 +184,34 @@ Instructions:
       const fullKey = parsed.name + '|' + parsed.unit;
       const available = onHandMap[fullKey] || 0;
       const needed = Math.max(parsed.qty - available, 0);
-
       if (needed === 0) continue;
       if (!grouped[key]) grouped[key] = {};
       if (!grouped[key][parsed.unit]) grouped[key][parsed.unit] = 0;
       grouped[key][parsed.unit] += needed;
     }
 
-    const shoppingLines = [];
-    for (const name of Object.keys(grouped).sort()) {
-      shoppingLines.push(`\n${name.charAt(0).toUpperCase() + name.slice(1)}:`);
-      for (const unit of Object.keys(grouped[name])) {
-        const qty = grouped[name][unit];
-        const unitLabel = unit ? ` ${unit}` : '';
-        shoppingLines.push(`• ${qty}${unitLabel}`);
+    // 🗂️ Format by category
+    const categorized = {};
+    for (const name of Object.keys(grouped)) {
+      const cat = categorizeIngredient(name);
+      if (!categorized[cat]) categorized[cat] = {};
+      categorized[cat][name] = grouped[name];
+    }
+
+    const lines = [];
+    for (const cat of Object.keys(categorized).sort()) {
+      lines.push(`\n<b>${cat}</b>`);
+      const ingredients = categorized[cat];
+      for (const name of Object.keys(ingredients).sort()) {
+        lines.push(`${name.charAt(0).toUpperCase() + name.slice(1)}:`);
+        for (const unit of Object.keys(ingredients[name])) {
+          const qty = ingredients[name][unit];
+          lines.push(`• ${qty}${unit ? ' ' + unit : ''}`);
+        }
       }
     }
 
-    const rebuiltShoppingList = shoppingLines.join('\n');
+    const rebuiltShoppingList = lines.join('\n');
     await fs.mkdir(CACHE_DIR, { recursive: true });
     await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify({
       name: data.name || 'Guest',
