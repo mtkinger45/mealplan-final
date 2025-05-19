@@ -13,18 +13,21 @@ const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CACHE_DIR = './cache';
 
-app.use(cors({
-  origin: function (origin, callback) {
-    const allowedOrigins = ['https://thechaostoconfidencecollective.com'];
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.warn('[CORS BLOCKED ORIGIN]', origin);
-      callback(new Error('CORS not allowed from this origin'));
-    }
-  },
-  credentials: true
-}));
+app.use((req, res, next) => {
+  const allowedOrigin = 'https://thechaostoconfidencecollective.com';
+
+  res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+
+  next();
+});
+
 
 app.use(bodyParser.json({ limit: '5mb' }));
 
