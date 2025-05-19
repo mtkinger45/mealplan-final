@@ -225,23 +225,23 @@ Instructions:
     
     
     
-    await fs.mkdir(CACHE_DIR, { recursive: true });
+        await fs.mkdir(CACHE_DIR, { recursive: true });
     await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify({
-      name: data.name || 'Guest',
-      mealPlan: stripFormatting(mealPlanPart.trim()),
+      name: name || 'Guest',
+      mealPlan: stripFormatting(mealPlanText.trim()),
       shoppingList: rebuiltShoppingList.trim(),
-      recipes
+      recipes: combinedRecipes
     }, null, 2));
 
     res.json({
       sessionId,
-      mealPlan: stripFormatting(mealPlanPart.trim()),
+      mealPlan: stripFormatting(mealPlanText.trim()),
       shoppingList: rebuiltShoppingList.trim(),
-      recipes
+      recipes: combinedRecipes
     });
   } catch (err) {
-    console.error('[API ERROR]', err);
-    res.status(500).json({ error: 'Meal plan generation failed.' });
+    console.error('[MEALPLAN ROUTE ERROR]', err.stack || err.message || err);
+    res.status(500).json({ error: 'Meal plan generation failed. Check server logs for details.' });
   }
 });
 
@@ -249,9 +249,12 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
   const { sessionId } = req.params;
   const { type } = req.query;
   const filePath = path.join('./cache', `${sessionId}.json`);
+
   try {
     const cache = JSON.parse(await fs.readFile(filePath, 'utf-8'));
-    let content = '', filename = '';
+
+    let content = '';
+    let filename = '';
     if (type === 'mealplan') {
       content = `Meal Plan for ${cache.name}\n\n${cache.mealPlan}`;
       filename = `${sessionId}-mealplan.pdf`;
@@ -264,13 +267,14 @@ app.get('/api/pdf/:sessionId', async (req, res) => {
     } else {
       return res.status(400).json({ error: 'Invalid type parameter.' });
     }
+
     const buffer = await createPdfFromText(content, { type });
     const url = await uploadPdfToS3(buffer, filename);
     res.json({ url });
   } catch (err) {
-    console.error('[PDF ERROR]', err);
+    console.error('[PDF EXPORT ERROR]', err.message);
     res.status(500).json({ error: 'Failed to generate PDF.' });
   }
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
