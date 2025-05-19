@@ -135,8 +135,20 @@ Instructions:
       }).then(c => c.choices?.[0]?.message?.content?.trim() || '');
     });
 
-    const outputs = await Promise.all(tasks);
-    const recipes = outputs.join('\n\n---\n\n');
+    const recipeBlocks = await Promise.all(tasks);
+
+const recipesByDay = recipeInfoList.map((entry, idx) => {
+  const content = recipeBlocks[idx];
+  return {
+    ...entry,
+    fullText: content
+  };
+});
+
+const recipes = recipesByDay.map(r =>
+  `**Meal Name:** ${r.day} ${r.meal} – ${r.title}\n${r.fullText}`
+).join('\n\n---\n\n');
+
 
     const rawIngredients = [];
     const recipeSections = recipes.match(/\*\*Ingredients:\*\*[\s\S]*?(?=\*\*Instructions:|\*\*Prep Time|---|$)/g) || [];
