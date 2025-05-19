@@ -32,6 +32,52 @@ function stripFormatting(text) {
   return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*/g, '');
 }
 
+const unitConversion = {
+  tbsp: { to: 'cups', factor: 1 / 16 },
+  tsp: { to: 'cups', factor: 1 / 48 },
+  oz: { to: 'cups', factor: 1 / 8 },
+  cups: { to: 'cups', factor: 1 },
+  cloves: { to: 'cloves', factor: 1 },
+  pieces: { to: 'pieces', factor: 1 },
+  fillets: { to: 'fillets', factor: 1 },
+  lbs: { to: 'lbs', factor: 1 }
+};
+
+function normalizeUnit(unit = '') {
+  const u = unit.toLowerCase();
+  return unitConversion[u]?.to || u;
+}
+
+function normalizeIngredient(name) {
+  const cleaned = name
+    .toLowerCase()
+    .replace(/\(.*?\)/g, '')
+    .replace(/\b(fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|to taste|as needed|coarsely|finely|halved|juiced|zest|drained|shredded|grated|boneless|skinless|low-sodium|lowfat|cubed|peeled|cut into.*|for garnish(?:ing)?|approximately.*)\b/gi, '')
+    .replace(/[^a-zA-Z\s]/g, '')
+    .replace(/\bof\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return cleaned
+    .replace(/butter.*/, 'butter')
+    .replace(/unsalted butter/, 'butter')
+    .replace(/melted butter/, 'butter')
+    .replace(/garlic.*/, 'garlic')
+    .replace(/parsley.*/, 'parsley')
+    .replace(/soy sauce.*/, 'soy sauce')
+    .replace(/apple cider vinegar.*/, 'apple cider vinegar')
+    .replace(/black pepper.*/, 'black pepper')
+    .replace(/bell pepper.*/, 'bell pepper')
+    .replace(/green onion.*/, 'green onion')
+    .replace(/scallion.*/, 'green onion')
+    .replace(/ribeye.*|steaks.*|steak.*/g, 'ribeye steak')
+    .replace(/fish fillet.*/g, 'fish fillets')
+    .replace(/carrots.*/, 'carrots')
+    .replace(/olive oil.*/, 'olive oil')
+    .replace(/lemon juice.*/, 'lemon juice')
+    .replace(/lime juice.*/, 'lime juice');
+}
+
 function parseStructuredIngredients(text) {
   const matches = text.match(/\*\*Ingredients:\*\*[\s\S]*?(?=\*\*Instructions:|\*\*Prep Time|\*\*Macros|---|$)/g) || [];
   const items = [];
@@ -52,50 +98,6 @@ function parseStructuredIngredients(text) {
   return items;
 }
 
-function normalizeIngredient(name) {
-  const cleaned = name
-    .toLowerCase()
-    .replace(/\(.*?\)/g, '')
-    .replace(/\b(fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|to taste|as needed|coarsely|finely|halved|juiced|zest|drained|shredded|grated|boneless|skinless|low-sodium|lowfat|cubed|peeled|for garnish(?:ing)?)\b/gi, '')
-    .replace(/[^a-zA-Z\s]/g, '')
-    .replace(/\bof\b/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  return cleaned
-    .replace(/butter.*/, 'butter')
-    .replace(/unsalted butter/, 'butter')
-    .replace(/melted butter/, 'butter')
-    .replace(/garlic.*/, 'garlic')
-    .replace(/parsley.*/, 'parsley')
-    .replace(/soy sauce.*/, 'soy sauce')
-    .replace(/apple cider vinegar.*/, 'apple cider vinegar')
-    .replace(/basil|oregano|thyme|rosemary/, 'herbs')
-    .replace(/black pepper.*/, 'black pepper')
-    .replace(/bell pepper.*/, 'bell pepper')
-    .replace(/green onion.*/, 'green onion')
-    .replace(/scallion.*/, 'green onion');
-}
-
-
-const unitConversion = {
-  tbsp: { to: 'cups', factor: 1 / 16 },
-  tsp: { to: 'cups', factor: 1 / 48 },
-  oz: { to: 'cups', factor: 1 / 8 },
-  cups: { to: 'cups', factor: 1 },
-  cloves: { to: 'cloves', factor: 1 },
-  bunch: { to: 'bunch', factor: 1 },
-  small: { to: 'small', factor: 1 },
-  large: { to: 'large', factor: 1 }
-};
-
-function normalizeUnit(unit = '') {
-  const u = unit.toLowerCase();
-  return unitConversion[u]?.to || u;
-}
-
-
-
 function categorizeIngredient(name) {
   const i = name.toLowerCase();
   if (/lemon|lime|avocado|olive/.test(i)) return 'Fruit';
@@ -106,7 +108,7 @@ function categorizeIngredient(name) {
   if (/egg/.test(i)) return 'Dairy';
   if (/milk|cream|cheese/.test(i)) return 'Dairy';
   if (/lettuce|spinach|zucchini|broccoli|onion|pepper|cucumber|radish|mushroom|cauliflower|tomato|peas|green beans|asparagus|cabbage/.test(i)) return 'Produce';
-  if (/butter|ghee|oil|olive|vinegar|sugar/.test(i)) return 'Pantry';
+  if (/butter|ghee|oil|vinegar|sugar/.test(i)) return 'Pantry';
   return 'Other';
 }
 
@@ -206,19 +208,16 @@ Instructions:
 
     const structuredIngredients = parseStructuredIngredients(recipes);
     const aggregated = {};
-for (const { name, qty, unit } of structuredIngredients) {
-  if (!name || isNaN(qty)) continue;
-  const normName = normalizeIngredient(name);
-  const baseUnit = normalizeUnit(unit);
-  const key = `${normName}|${baseUnit}`;
-
-  const factor = unitConversion[unit?.toLowerCase()]?.factor || 1;
-  const convertedQty = qty * factor;
-
-  if (!aggregated[key]) aggregated[key] = { name: normName, qty: 0, unit: baseUnit };
-  aggregated[key].qty += convertedQty;
-}
-
+    for (const { name, qty, unit } of structuredIngredients) {
+      if (!name || isNaN(qty)) continue;
+      const normName = normalizeIngredient(name);
+      const baseUnit = normalizeUnit(unit);
+      const key = `${normName}|${baseUnit}`;
+      const factor = unitConversion[unit?.toLowerCase()]?.factor || 1;
+      const convertedQty = qty * factor;
+      if (!aggregated[key]) aggregated[key] = { name: normName, qty: 0, unit: baseUnit };
+      aggregated[key].qty += convertedQty;
+    }
 
     const onHandLines = data.onHandIngredients?.toLowerCase().split(/\n|,/) || [];
     const onHandMap = buildOnHandMap(onHandLines);
