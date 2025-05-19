@@ -121,41 +121,6 @@ function buildOnHandMap(rawList) {
   return map;
 }
 
-// You can now continue this file with your full API route logic using these helpers
-function groupByCategory(ingredients, onHandItems = []) {
-  const grouped = {};
-  const onHandUsed = [];
-
-  for (const item of ingredients) {
-    const cat = categorizeIngredient(item.name);
-    const key = `${item.name}__${item.unit}`;
-    if (!grouped[cat]) grouped[cat] = {};
-    if (!grouped[cat][key]) grouped[cat][key] = { ...item, qty: 0 };
-    grouped[cat][key].qty += item.qty;
-
-    const flatName = item.name.toLowerCase();
-    if (onHandItems.some(h => flatName.includes(h.toLowerCase()))) {
-      onHandUsed.push(item);
-    }
-  }
-
-  const lines = [];
-  const sortedCats = Object.keys(grouped).sort();
-  for (const cat of sortedCats) {
-    lines.push(`\n<b>${cat}</b>`);
-    const sortedItems = Object.values(grouped[cat]).sort((a, b) => a.name.localeCompare(b.name));
-    for (const ing of sortedItems) {
-      const label = ing.unit ? `${ing.qty} ${ing.unit}` : `${ing.qty}`;
-      const isOnHand = onHandItems.some(h => ing.name.toLowerCase().includes(h.toLowerCase()));
-      const note = isOnHand ? ' (on hand)' : '';
-      lines.push(`• ${capitalize(ing.name)}: ${label}${note}`);
-    }
-  }
-
-  return lines.join('\n');
-}
-
-
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
@@ -234,27 +199,22 @@ Instructions:
       aggregated[key].qty += qty;
     }
 
-    const categorized = {};
-    const onHandList = data.onHandIngredients?.toLowerCase().split(/\n|,/) || [];
-    const onHandUsed = [];
+    const onHandLines = data.onHandIngredients?.toLowerCase().split(/\n|,/) || [];
+    const onHandMap = buildOnHandMap(onHandLines);
+    adjustForOnHand(aggregated, onHandMap);
 
+    const categorized = {};
     Object.values(aggregated).forEach(({ name, qty, unit }) => {
       const cat = categorizeIngredient(name);
       if (!categorized[cat]) categorized[cat] = [];
-      const owned = onHandList.some(o => name.includes(o.trim()));
-      const label = `${capitalize(name)}: ${qty} ${unit}` + (owned ? ' (on-hand)' : '');
+      const label = `${capitalize(name)}: ${qty} ${unit}`;
       categorized[cat].push(label);
-      if (owned) onHandUsed.push(label);
     });
 
     let rebuiltShoppingList = '';
     for (const category of Object.keys(categorized).sort()) {
       rebuiltShoppingList += `\n${category}:\n`;
       for (const i of categorized[category].sort()) rebuiltShoppingList += `• ${i}\n`;
-    }
-    if (onHandUsed.length) {
-      rebuiltShoppingList += '\nOn-hand Ingredients Used:\n';
-      for (const i of onHandUsed.sort()) rebuiltShoppingList += `• ${i}\n`;
     }
 
     await fs.mkdir(CACHE_DIR, { recursive: true });
@@ -271,34 +231,3 @@ Instructions:
     res.status(500).json({ error: 'Meal plan generation failed.' });
   }
 });
-
-app.get('/api/pdf/:sessionId', async (req, res) => {
-  const { sessionId } = req.params;
-  const { type } = req.query;
-  const filePath = path.join('./cache', `${sessionId}.json`);
-  try {
-    const cache = JSON.parse(await fs.readFile(filePath, 'utf-8'));
-    let content = '', filename = '';
-    if (type === 'mealplan') {
-      content = `Meal Plan for ${cache.name}\n\n${cache.mealPlan}`;
-      filename = `${sessionId}-mealplan.pdf`;
-    } else if (type === 'recipes') {
-      content = cache.recipes;
-      filename = `${sessionId}-recipes.pdf`;
-    } else if (type === 'shopping-list') {
-      content = cache.shoppingList;
-      filename = `${sessionId}-shopping.pdf`;
-    } else {
-      return res.status(400).json({ error: 'Invalid type parameter.' });
-    }
-    const buffer = await createPdfFromText(content, { type });
-    const url = await uploadPdfToS3(buffer, filename);
-    res.json({ url });
-  } catch (err) {
-    console.error('[PDF ERROR]', err);
-    res.status(500).json({ error: 'Failed to generate PDF.' });
-  }
-});
-
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-
