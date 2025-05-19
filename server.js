@@ -37,10 +37,12 @@ const unitConversion = {
   tsp: { to: 'cups', factor: 1 / 48 },
   oz: { to: 'cups', factor: 1 / 8 },
   cups: { to: 'cups', factor: 1 },
-  cloves: { to: 'cloves', factor: 1 },
-  pieces: { to: 'pieces', factor: 1 },
-  fillets: { to: 'fillets', factor: 1 },
-  lbs: { to: 'lbs', factor: 1 }
+  cloves: { to: 'clove', factor: 1 },
+  pounds: { to: 'lb', factor: 1 },
+  lbs: { to: 'lb', factor: 1 },
+  cup: { to: 'cups', factor: 1 },
+  tablespoons: { to: 'tbsp', factor: 1 },
+  teaspoons: { to: 'tsp', factor: 1 },
 };
 
 function normalizeUnit(unit = '') {
@@ -52,13 +54,14 @@ function normalizeIngredient(name) {
   const cleaned = name
     .toLowerCase()
     .replace(/\(.*?\)/g, '')
-    .replace(/\b(fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|to taste|as needed|coarsely|finely|halved|juiced|zest|drained|shredded|grated|boneless|skinless|low-sodium|lowfat|cubed|peeled|cut into.*|for garnish(?:ing)?|approximately.*)\b/gi, '')
+    .replace(/\b(fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|to taste|as needed|coarsely|finely|halved|juiced|zest(ed)?|drained|shredded|grated|boneless|bonein|skinless|low-sodium|lowfat|cubed|peeled|cut into.*|for garnish(?:ing)?|approximately.*|deveined|raw)\b/gi, '')
     .replace(/[^a-zA-Z\s]/g, '')
     .replace(/\bof\b/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 
   return cleaned
+    .replace(/extra virgin olive oil|olive oil.*/g, 'olive oil')
     .replace(/butter.*/, 'butter')
     .replace(/unsalted butter/, 'butter')
     .replace(/melted butter/, 'butter')
@@ -72,14 +75,17 @@ function normalizeIngredient(name) {
     .replace(/scallion.*/, 'green onion')
     .replace(/ribeye.*|steaks.*|steak.*/g, 'ribeye steak')
     .replace(/fish fillet.*/g, 'fish fillets')
+    .replace(/salmon.*/, 'fish')
+    .replace(/white fish.*/, 'fish')
+    .replace(/shrimp.*/, 'shrimp')
     .replace(/carrots.*/, 'carrots')
-    .replace(/olive oil.*/, 'olive oil')
-    .replace(/lemon juice.*/, 'lemon juice')
-    .replace(/lime juice.*/, 'lime juice');
+    .replace(/lemon juice|lemon slices and herbs|lemons? zested and.*|lemons?|lemon.*/g, 'lemon')
+    .replace(/limes?|lime juice.*/g, 'lime')
+    .replace(/chicken breast.*/g, 'chicken breasts')
+    .replace(/chickens?.*/, 'chicken');
 }
-
 function parseStructuredIngredients(text) {
-  const matches = text.match(/\*\*Ingredients:\*\*[\s\S]*?(?=\*\*Instructions:|\*\*Prep Time|\*\*Macros|---|$)/g) || [];
+  const matches = text.match(/\*\*Ingredients:\*\*[\s\S]*?(?=\*\*Instructions:|\*\*Prep Time|---|$)/g) || [];
   const items = [];
   for (const block of matches) {
     const lines = block.split('\n').slice(1);
@@ -147,6 +153,10 @@ app.post('/api/mealplan', async (req, res) => {
       calendarInsights = 'None', people = 4, name = 'Guest'
     } = data;
 
+    const allergyWarning = dietaryPreferences.toLowerCase().includes('shellfish')
+      ? '⚠️ User may be allergic to shellfish. ABSOLUTELY DO NOT include shrimp, crab, lobster, clams, or shellfish of any kind.'
+      : '';
+
     const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}.
 User Info:
 - Diet Type: ${dietType}
@@ -157,6 +167,8 @@ User Info:
 - On-hand Ingredients: ${onHandIngredients}
 - Household size: ${people}
 - Calendar Insights: ${calendarInsights || 'None'}
+
+${allergyWarning}
 
 Instructions:
 - Use ${startDay} as the first day
@@ -222,7 +234,6 @@ Instructions:
     const onHandLines = data.onHandIngredients?.toLowerCase().split(/\n|,/) || [];
     const onHandMap = buildOnHandMap(onHandLines);
     adjustForOnHand(aggregated, onHandMap);
-
     const categorized = {};
     Object.values(aggregated).forEach(({ name, qty, unit }) => {
       const cat = categorizeIngredient(name);
@@ -245,7 +256,12 @@ Instructions:
       recipes
     }, null, 2));
 
-    res.json({ sessionId, mealPlan: stripFormatting(mealPlanPart.trim()), shoppingList: rebuiltShoppingList.trim(), recipes });
+    res.json({
+      sessionId,
+      mealPlan: stripFormatting(mealPlanPart.trim()),
+      shoppingList: rebuiltShoppingList.trim(),
+      recipes
+    });
   } catch (err) {
     console.error('[API ERROR]', err);
     res.status(500).json({ error: 'Meal plan generation failed.' });
