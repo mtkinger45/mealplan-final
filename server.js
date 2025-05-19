@@ -13,7 +13,6 @@ const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CACHE_DIR = './cache';
 
-// FIXED: Explicit CORS headers
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', 'https://thechaostoconfidencecollective.com');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -30,32 +29,20 @@ function stripFormatting(text) {
 
 function normalizeName(name) {
   return name.toLowerCase()
-    .replace(/ribeye.*|steaks?.*|beef.*steak/, 'ribeye steak')
-    .replace(/onions?.*|chopped onion.*/, 'onion')
-    .replace(/garlic.*|minced garlic/, 'garlic')
-    .replace(/butter.*|unsalted butter|salted butter|melted butter/, 'butter')
-    .replace(/eggs?.*|beaten eggs/, 'eggs')
-    .replace(/(pieces|cups|slices|cloves|oz|lbs|tablespoons|tablespoon|tbsp|tsp|teaspoons|teaspoon)/gi, '')
+    .replace(/\b(of|and|into|thinly|sliced|chopped|grated|shredded|mediumsized|large|small|boneless|skinless|smoked|whole|fresh|cut|peeled|halved|zested|juiced)\b/g, '')
     .replace(/[^a-zA-Z ]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 function normalizeAndParseIngredient(line) {
-  const clean = line.toLowerCase()
-    .replace(/\(.*?\)/g, '')
-    .replace(/[^a-zA-Z0-9\s.]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-
+  const clean = line.toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-zA-Z0-9\s.]/g, '').replace(/\s+/g, ' ').trim();
   const match = clean.match(/^(\d+(?:\.\d+)?)(?:\s+)?([a-zA-Z]+)?\s+(.*)$/);
   if (!match) return null;
-
   const [, qtyStr, unitRaw, nameRaw] = match;
   const qty = parseFloat(qtyStr);
   const unit = (unitRaw || '').toLowerCase();
   const name = normalizeName(nameRaw);
-
   return { name, qty, unit };
 }
 
@@ -71,6 +58,7 @@ function parseOnHandMap(text) {
   }
   return map;
 }
+
 function categorizeIngredient(name) {
   const i = name.toLowerCase();
   if (/lemon|lime|avocado|zucchini|tomato|onion|garlic|pepper|mushroom|cucumber|carrot|broccoli|spinach|lettuce|peas|green beans|asparagus|cabbage|cauliflower/.test(i)) return 'Produce';
@@ -79,7 +67,6 @@ function categorizeIngredient(name) {
   if (/oil|vinegar|sugar|flour|baking|yeast|spice|salt|pepper|herb|cornstarch|broth|syrup/.test(i)) return 'Pantry';
   return 'Other';
 }
-
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
@@ -91,10 +78,10 @@ app.post('/api/mealplan', async (req, res) => {
     } = data;
 
     const allergyWarning = dietaryPreferences.toLowerCase().includes('shellfish')
-      ? '⚠️ User may be allergic to shellfish. ABSOLUTELY DO NOT include shrimp, crab, lobster, clams, or shellfish of any kind.'
+      ? '⚠️ User may be allergic to shellfish. DO NOT include shrimp, crab, lobster, clams, or shellfish.'
       : '';
 
-    const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}.
+    const planPrompt = `You are a professional meal planner. Create a ${duration}-day meal plan starting on ${startDay} using only these meals: ${meals.join(', ')}.
 User Info:
 - Diet Type: ${dietType}
 - Preferences: ${dietaryPreferences}
@@ -104,20 +91,16 @@ User Info:
 - On-hand Ingredients: ${onHandIngredients}
 - Household size: ${people}
 - Calendar Insights: ${calendarInsights}
-
 ${allergyWarning}
 
 Instructions:
-- Use ${startDay} as the first day
-- Respect all dietary preferences
-- End with a shopping list
-- Include a JSON array of all meals with day, meal type, and title`;
+- Only output the meal plan with JSON array of {day, meal, title} and finish with a basic shopping list grouped by category.`;
 
     const mealPlanRes = await openai.chat.completions.create({
       model: 'gpt-4',
       messages: [
         { role: 'system', content: 'You are a professional meal planner.' },
-        { role: 'user', content: prompt }
+        { role: 'user', content: planPrompt }
       ],
       temperature: 0.7,
       max_tokens: 3000
@@ -130,21 +113,20 @@ Instructions:
     if (jsonMatch) {
       try { recipeInfoList = JSON.parse(jsonMatch[0]); } catch (e) { console.error('[JSON PARSE ERROR]', e); }
     }
-    if (!recipeInfoList.length) throw new Error('Recipe list is empty — unable to generate meal plan.');
+    if (!recipeInfoList.length) throw new Error('Meal plan JSON missing.');
 
     const tasks = recipeInfoList.map(({ day, meal, title }) => {
-      const prompt = `You are a professional recipe writer. Create a recipe with the following format.
+      const prompt = `You are a recipe writer. Generate a recipe:
 **Meal Name:** ${day} ${meal} – ${title}
-**Ingredients:**
-- list each ingredient with quantity for ${people} people in U.S. measurements
-**Instructions:**
-1. step-by-step instructions
+**Ingredients:** (for ${people} people, U.S. measurements)
+- list each item like "1 cup broccoli"
+**Instructions:** Steps
 **Prep Time:** X minutes
 **Macros:** Protein, Fat, Carbs`;
       return openai.chat.completions.create({
         model: 'gpt-4',
         messages: [
-          { role: 'system', content: 'You are a professional recipe writer.' },
+          { role: 'system', content: 'You are a recipe writer.' },
           { role: 'user', content: prompt }
         ],
         temperature: 0.7,
@@ -190,7 +172,7 @@ Instructions:
       grouped[key][parsed.unit] += needed;
     }
 
-    // 🗂️ Format by category
+    // Categorize and format
     const categorized = {};
     for (const name of Object.keys(grouped)) {
       const cat = categorizeIngredient(name);
