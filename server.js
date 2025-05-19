@@ -20,17 +20,14 @@ app.use(cors({
   credentials: true
 }));
 
-
 app.use(bodyParser.json({ limit: '5mb' }));
 
 function stripFormatting(text) {
   return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*/g, '');
 }
 
-// Ingredient parsing + cleaning
 function normalizeAndParseIngredient(line) {
-  const original = line.toLowerCase();
-  const clean = original
+  const clean = line.toLowerCase()
     .replace(/\(.*?\)/g, '')
     .replace(/[^a-zA-Z0-9\s.]/g, '')
     .replace(/\s+/g, ' ')
@@ -43,7 +40,7 @@ function normalizeAndParseIngredient(line) {
   const qty = parseFloat(qtyStr);
   const unit = (unitRaw || '').toLowerCase();
   const name = nameRaw
-    .replace(/approximately|about|each|medium|large|small|boneless|skinless|trimmed|cleaned|sliced|diced|ends|halved|zested|juiced|grilled|beaten|leftover|cut into.*|thickcut|for serving/gi, '')
+    .replace(/approximately|about|each|medium|large|small|boneless|skinless|trimmed|cleaned|sliced|diced|ends|halved|zested|juiced|grilled|beaten|leftover|cut into.*|thickcut|thinly|for serving/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -56,7 +53,7 @@ function parseOnHandMap(text) {
   for (const line of lines) {
     const parsed = normalizeAndParseIngredient(line.trim());
     if (parsed) {
-      const key = parsed.name;
+      const key = parsed.name + '|' + parsed.unit;
       map[key] = (map[key] || 0) + parsed.qty;
     }
   }
@@ -96,7 +93,7 @@ ${allergyWarning}
 Instructions:
 - Use ${startDay} as the first day
 - Respect all dietary preferences
-- End with a shopping list grouped by category and subtract on-hand items
+- End with a shopping list
 - Include a JSON array of all meals with day, meal type, and title`;
 
     const mealPlanRes = await openai.chat.completions.create({
@@ -153,54 +150,49 @@ Instructions:
       }
     }
 
-    // Parse on-hand ingredients
+    // Parse on-hand map
     const onHandMap = parseOnHandMap(onHandIngredients);
-    const merged = {};
+    const grouped = {};
+
     for (const line of rawIngredients) {
       const parsed = normalizeAndParseIngredient(line);
       if (!parsed || isNaN(parsed.qty)) continue;
       const key = parsed.name;
-      const available = onHandMap[key] || 0;
+      const fullKey = parsed.name + '|' + parsed.unit;
+      const available = onHandMap[fullKey] || 0;
       const needed = Math.max(parsed.qty - available, 0);
 
-      if (!merged[key]) merged[key] = { name: key, qty: 0, unit: parsed.unit };
-      merged[key].qty += needed;
+      if (needed === 0) continue;
+
+      if (!grouped[key]) grouped[key] = {};
+      if (!grouped[key][parsed.unit]) grouped[key][parsed.unit] = 0;
+      grouped[key][parsed.unit] += needed;
     }
 
-    const mergedListForGpt = Object.values(merged).map(item => {
-      const qtyStr = item.unit ? `${item.qty} ${item.unit}` : `${item.qty}`;
-      return `• ${qtyStr} ${item.name}`;
-    }).join('\n');
+    // Build readable shopping list
+    const shoppingLines = [];
+    for (const name of Object.keys(grouped).sort()) {
+      shoppingLines.push(`\n${name.charAt(0).toUpperCase() + name.slice(1)}:`);
+      for (const unit of Object.keys(grouped[name])) {
+        const qty = grouped[name][unit];
+        const unitLabel = unit ? ` ${unit}` : '';
+        shoppingLines.push(`• ${qty}${unitLabel}`);
+      }
+    }
 
-    const cleanedShoppingRes = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [
-        { role: 'system', content: 'You are a professional chef and meal planner.' },
-        {
-          role: 'user',
-          content: `Here is a merged list of ingredients from multiple recipes. 
-Please group them by category (e.g., Produce, Meat, Pantry), and make the list clean and readable.
-
-${mergedListForGpt}`
-        }
-      ],
-      temperature: 0.5,
-      max_tokens: 1200
-    });
-
-    const cleanedShoppingList = cleanedShoppingRes.choices?.[0]?.message?.content?.trim() || 'No shopping list generated.';
+    const rebuiltShoppingList = shoppingLines.join('\n');
     await fs.mkdir(CACHE_DIR, { recursive: true });
     await fs.writeFile(path.join(CACHE_DIR, `${sessionId}.json`), JSON.stringify({
       name: data.name || 'Guest',
       mealPlan: stripFormatting(mealPlanPart.trim()),
-      shoppingList: cleanedShoppingList,
+      shoppingList: rebuiltShoppingList.trim(),
       recipes
     }, null, 2));
 
     res.json({
       sessionId,
       mealPlan: stripFormatting(mealPlanPart.trim()),
-      shoppingList: cleanedShoppingList,
+      shoppingList: rebuiltShoppingList.trim(),
       recipes
     });
   } catch (err) {
