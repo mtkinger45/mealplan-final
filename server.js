@@ -81,9 +81,9 @@ function categorizeIngredient(name) {
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
-    console.log('[REQUEST RECEIVED]', JSON.stringify(data, null, 2));
-
     const sessionId = randomUUID();
+    console.log('[REQUEST]', JSON.stringify(data, null, 2));
+
     const {
       duration = 7, startDay = 'Monday', meals = ['Supper'], dietType = 'Any', dietaryPreferences = 'None',
       mealStyle = 'Any', cookingRequests = 'None', appliances = [], onHandIngredients = '',
@@ -91,25 +91,27 @@ app.post('/api/mealplan', async (req, res) => {
     } = data;
 
     const allergyWarning = dietaryPreferences.toLowerCase().includes('shellfish')
-      ? '⚠️ User may be allergic to shellfish. DO NOT include shrimp, crab, lobster, clams, or shellfish.'
+      ? '⚠️ This user is allergic to shellfish. DO NOT include shrimp, crab, lobster, or any shellfish.'
       : '';
 
-    const planPrompt = `You are a professional meal planner. Create a ${duration}-day meal plan starting on ${startDay} using only these meals: ${meals.join(', ')}.
+    const planPrompt = `You are a professional meal planner. Create a ${duration}-day meal plan starting on ${startDay}.
+Include ONLY these meals per day: ${meals.join(', ')}.
 User Info:
-- Diet Type: ${dietType}
+- Diet: ${dietType}
 - Preferences: ${dietaryPreferences}
 - Cooking Style: ${mealStyle}
 - Special Requests: ${cookingRequests}
 - Appliances: ${appliances.join(', ') || 'None'}
-- On-hand Ingredients: ${onHandIngredients}
-- Household size: ${people}
-- Calendar Insights: ${calendarInsights}
+- Household Size: ${people}
+- Calendar Notes: ${calendarInsights}
 ${allergyWarning}
 
 Instructions:
-- Only output the meal plan with JSON array of {day, meal, title} and finish with a basic shopping list grouped by category.`;
+- Output a JSON array only, listing each meal: { "day": "Monday", "meal": "Supper", "title": "Grilled Chicken with Veggies" }
+- No meal titles should repeat across days.
+- After JSON, include a simple shopping list grouped by category.`;
 
-    const mealPlanRes = await openai.chat.completions.create({
+    const planRes = await openai.chat.completions.create({
       model: 'gpt-4',
       messages: [
         { role: 'system', content: 'You are a professional meal planner.' },
@@ -119,11 +121,11 @@ Instructions:
       max_tokens: 3000
     });
 
-    const result = mealPlanRes.choices?.[0]?.message?.content || '';
-    console.log('[RAW GPT PLAN OUTPUT]', result.slice(0, 500));
+    const fullResponse = planRes.choices?.[0]?.message?.content || '';
+    console.log('[GPT PLAN OUTPUT]', fullResponse.slice(0, 600));
 
-    const [mealPlanPart] = result.split(/(?=Shopping List)/i);
-    const jsonMatch = result.match(/\[.*\]/s);
+    const [mealPlanText] = fullResponse.split(/(?=Shopping List)/i);
+    const jsonMatch = mealPlanText.match(/\[.*\]/s);
     let recipeInfoList = [];
 
     if (jsonMatch) {
@@ -131,53 +133,53 @@ Instructions:
         recipeInfoList = JSON.parse(jsonMatch[0]);
       } catch (e) {
         console.error('[JSON PARSE ERROR]', e.message, '\nRaw JSON:', jsonMatch[0]);
-        return res.status(500).json({ error: 'Failed to parse meal plan JSON from GPT.' });
+        return res.status(500).json({ error: 'Invalid meal plan format from GPT.' });
       }
     }
 
     if (!recipeInfoList.length) {
-      console.error('[NO RECIPES FOUND]');
-      return res.status(500).json({ error: 'Meal plan returned empty or malformed JSON array.' });
+      console.error('[ERROR] No valid meals returned.');
+      return res.status(500).json({ error: 'Meal plan returned no meals.' });
     }
 
-    const tasks = recipeInfoList.map(({ day, meal, title }) => {
-      const prompt = `You are a recipe writer. Generate a recipe:
+    const recipeTasks = recipeInfoList.map(({ day, meal, title }) => {
+      const prompt = `You are a recipe writer. Write a recipe for the following:
 **Meal Name:** ${day} ${meal} – ${title}
-**Ingredients:** (for ${people} people, U.S. measurements)
-- list each item like "1 cup broccoli"
-**Instructions:** Steps
+**Ingredients:** List for ${people} people using U.S. measurements.
+- Each line should be: "X unit item"
+**Instructions:** Step-by-step cooking directions.
 **Prep Time:** X minutes
-**Macros:** Protein, Fat, Carbs`;
+**Macros:** Protein, Fat, Carbs.`;
+
       return openai.chat.completions.create({
         model: 'gpt-4',
         messages: [
-          { role: 'system', content: 'You are a recipe writer.' },
+          { role: 'system', content: 'You are a professional recipe writer.' },
           { role: 'user', content: prompt }
         ],
         temperature: 0.7,
         max_tokens: 1000
-      }).then(c => c.choices?.[0]?.message?.content?.trim() || '');
+      }).then(r => r.choices?.[0]?.message?.content?.trim() || '');
     });
 
-    const recipeBlocks = await Promise.all(tasks);
-    const recipesByDay = recipeInfoList.map((entry, idx) => ({
+    const recipeOutputs = await Promise.all(recipeTasks);
+    const recipesByDay = recipeInfoList.map((entry, i) => ({
       ...entry,
-      fullText: recipeBlocks[idx]
+      fullText: recipeOutputs[i]
     }));
 
-    const recipes = recipesByDay.map(r =>
+    const combinedRecipes = recipesByDay.map(r =>
       `**Meal Name:** ${r.day} ${r.meal} – ${r.title}\n${r.fullText}`
     ).join('\n\n---\n\n');
 
     const rawIngredients = [];
-    const recipeSections = recipes.match(/\*\*Ingredients:\*\*[\s\S]*?(?=\*\*Instructions:|\*\*Prep Time|---|$)/g) || [];
+    const recipeSections = combinedRecipes.match(/\*\*Ingredients:\*\*[\s\S]*?(?=\*\*Instructions:|\*\*Prep Time|---|$)/g) || [];
+
     for (const block of recipeSections) {
       const lines = block.split('\n').slice(1);
       for (const line of lines) {
         const clean = line.replace(/^[-•]\s*/, '').trim();
-        if (clean && !/to taste|optional/i.test(clean)) {
-          rawIngredients.push(clean);
-        }
+        if (clean && !/to taste|optional/i.test(clean)) rawIngredients.push(clean);
       }
     }
 
@@ -204,21 +206,21 @@ Instructions:
       categorized[cat][name] = grouped[name];
     }
 
-    const lines = [];
+    const listLines = [];
     for (const cat of Object.keys(categorized).sort()) {
-      lines.push(`\n<b>${cat}</b>`);
+      listLines.push(`\n<b>${cat}</b>`);
       const ingredients = categorized[cat];
       for (const name of Object.keys(ingredients).sort()) {
-        lines.push(`${name.charAt(0).toUpperCase() + name.slice(1)}:`);
+        listLines.push(`${name.charAt(0).toUpperCase() + name.slice(1)}:`);
         for (const unit of Object.keys(ingredients[name])) {
           const qty = ingredients[name][unit];
-          lines.push(`• ${qty}${unit ? ' ' + unit : ''}`);
+          listLines.push(`• ${qty}${unit ? ' ' + unit : ''}`);
         }
       }
     }
 
-    const rebuiltShoppingList = lines.join('\n');
-    console.log('[SHOPPING LIST]', rebuiltShoppingList.slice(0, 500));
+    const rebuiltShoppingList = listLines.join('\n');
+    console.log('[SHOPPING LIST]', rebuiltShoppingList.slice(0, 300));
 
     
     
