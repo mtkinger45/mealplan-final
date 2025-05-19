@@ -31,6 +31,28 @@ app.use(bodyParser.json({ limit: '5mb' }));
 function stripFormatting(text) {
   return text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*/g, '');
 }
+
+function normalizeAndParseIngredient(line) {
+  const original = line.toLowerCase();
+  const clean = original
+    .replace(/\(.*?\)/g, '')
+    .replace(/[^a-zA-Z0-9\s.]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const match = clean.match(/^(\d+(?:\.\d+)?)(?:\s+)?([a-zA-Z]+)?\s+(.*)$/);
+  if (!match) return null;
+
+  const [, qtyStr, unitRaw, nameRaw] = match;
+  const qty = parseFloat(qtyStr);
+  const unit = (unitRaw || '').toLowerCase();
+  const name = nameRaw
+    .replace(/approximately|about|each|medium|large|small|boneless|skinless|trimmed|cleaned|sliced|diced|ends|halved|zested|juiced|of|oz|ounces|inch|fillet|steak|strips?/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return { name, qty, unit };
+}
 app.post('/api/mealplan', async (req, res) => {
   try {
     const data = req.body;
@@ -122,19 +144,19 @@ Instructions:
       }
     }
 
-    function simplifyIngredient(line) {
-      return line
-        .toLowerCase()
-        .replace(/\(.*?\)/g, '')
-        .replace(/approximately|about|each|medium-sized|large|small|trimmed|cleaned|sliced|diced|ends|halved|for serving/gi, '')
-        .replace(/[^a-zA-Z0-9\s\-.,]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+    const merged = {};
+    for (const line of rawIngredients) {
+      const parsed = normalizeAndParseIngredient(line);
+      if (!parsed || isNaN(parsed.qty)) continue;
+      const key = parsed.name;
+      if (!merged[key]) merged[key] = { ...parsed };
+      else merged[key].qty += parsed.qty;
     }
 
-    const simplifiedIngredients = Array.from(new Set(
-      rawIngredients.map(simplifyIngredient)
-    ));
+    const mergedListForGpt = Object.values(merged).map(item => {
+      const qtyStr = item.unit ? `${item.qty} ${item.unit}` : `${item.qty}`;
+      return `• ${qtyStr} ${item.name}`;
+    }).join('\n');
 
     const cleanedShoppingRes = await openai.chat.completions.create({
       model: 'gpt-4',
@@ -142,14 +164,10 @@ Instructions:
         { role: 'system', content: 'You are a professional chef and meal planner.' },
         {
           role: 'user',
-          content: `Below is a combined list of ingredients from multiple recipes. 
-Please consolidate duplicates, convert units where helpful (e.g., tbsp to cups), and group by category (e.g., Produce, Meat, Pantry). 
+          content: `Here is a merged list of ingredients from multiple recipes. 
+Please group them by category (e.g., Produce, Meat, Pantry), and make the list clean and readable.
 
-If there are ingredients listed with the same name but different units, attempt to merge or clarify. Keep the format clean and human-readable.
-
-Here’s the list:
-${simplifiedIngredients.map(i => '- ' + i).join('\n')}
-`
+${mergedListForGpt}`
         }
       ],
       temperature: 0.5,
