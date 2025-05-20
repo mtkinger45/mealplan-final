@@ -28,7 +28,6 @@ app.use((req, res, next) => {
   next();
 });
 
-
 app.use(bodyParser.json({ limit: '5mb' }));
 
 function stripFormatting(text) {
@@ -52,6 +51,7 @@ function normalizeUnit(unit = '') {
   const u = unit.toLowerCase();
   return unitConversion[u]?.to || u;
 }
+
 function overrideUnitForIngredient(name, originalUnit) {
   if (name === 'ribeye steak') return 'lb';
   if (name === 'chicken breasts') return 'lb';
@@ -93,6 +93,9 @@ function normalizeIngredient(name) {
     .replace(/chicken breast.*/g, 'chicken breasts')
     .replace(/chickens?.*/, 'chicken');
 }
+
+
+
 
 function parseStructuredIngredients(text) {
   const matches = text.match(/\*\*Ingredients:\*\*[\s\S]*?(?=\*\*Instructions:|\*\*Prep Time|---|$)/g) || [];
@@ -158,16 +161,20 @@ app.post('/api/mealplan', async (req, res) => {
     const data = req.body;
     const sessionId = randomUUID();
     const {
-  duration = 7, startDay = 'Monday', meals = ['Supper'], dietType = 'Any', avoidIngredients = 'None',
-  mealStyle = 'Any', cookingRequests = 'None', appliances = [], onHandIngredients = 'None',
-  calendarInsights = 'None', people = 4, name = 'Guest'
-} = data;
+      duration = 7, startDay = 'Monday', meals = ['Supper'], dietType = 'Any', avoidIngredients = 'None',
+      mealStyle = 'Any', cookingRequests = 'None', appliances = [], onHandIngredients = 'None',
+      calendarInsights = 'None', people = 4, name = 'Guest', feedback = ''
+    } = data;
 
-const avoidBlock = avoidIngredients && avoidIngredients.trim().toLowerCase() !== 'none'
-  ? `ABSOLUTELY DO NOT include any of the following ingredients in any meals or recipes: ${avoidIngredients}. These are allergies or strictly avoided.`
-  : '';
+    const avoidBlock = avoidIngredients && avoidIngredients.trim().toLowerCase() !== 'none'
+      ? `ABSOLUTELY DO NOT include any of the following ingredients in any meals or recipes: ${avoidIngredients}. These are allergies or strictly avoided.`
+      : '';
 
-const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}.
+    const feedbackBlock = feedback && feedback.trim()
+      ? `User has provided the following feedback to revise their plan: ${feedback}. Please prioritize this in the revised plan.`
+      : '';
+
+    const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}.
 User Info:
 - Diet Type: ${dietType}
 - Cooking Style: ${mealStyle}
@@ -179,14 +186,20 @@ User Info:
 
 ${avoidBlock}
 
+${feedbackBlock}
+
 Instructions:
 - Use ${startDay} as the first day
 - Do NOT include any avoid ingredients listed above
+- Honor any feedback above as a priority revision
 - End with a shopping list grouped by category and subtract on-hand items
 - Include a JSON array of all meals with day, meal type, and title`;
 
 
-    const mealPlanRes = await openai.chat.completions.create({
+
+
+
+      const mealPlanRes = await openai.chat.completions.create({
       model: 'gpt-4',
       messages: [
         { role: 'system', content: 'You are a professional meal planner.' },
@@ -241,7 +254,7 @@ Instructions:
       aggregated[key].qty += convertedQty;
     }
 
-    const onHandLines = data.onHandIngredients?.toLowerCase().split(/\n|,/) || [];
+    const onHandLines = onHandIngredients?.toLowerCase().split(/\n|,/) || [];
     const onHandMap = buildOnHandMap(onHandLines);
     adjustForOnHand(aggregated, onHandMap);
     const categorized = {};
@@ -256,11 +269,11 @@ Instructions:
     for (const category of Object.keys(categorized).sort()) {
       rebuiltShoppingList += `\n${category}:\n`;
       const sortedItems = categorized[category].slice().sort((a, b) =>
-  a.toLowerCase().localeCompare(b.toLowerCase())
-);
-for (const item of sortedItems) {
-  rebuiltShoppingList += `• ${item}\n`;
-}
+        a.toLowerCase().localeCompare(b.toLowerCase())
+      );
+      for (const item of sortedItems) {
+        rebuiltShoppingList += `• ${item}\n`;
+      }
     }
 
     await fs.mkdir(CACHE_DIR, { recursive: true });
