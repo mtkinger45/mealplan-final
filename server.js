@@ -158,19 +158,18 @@ app.post('/api/mealplan', async (req, res) => {
     const data = req.body;
     const sessionId = randomUUID();
     const {
-      duration = 7, startDay = 'Monday', meals = ['Supper'], dietType = 'Any', dietaryPreferences = 'None',
-      mealStyle = 'Any', cookingRequests = 'None', appliances = [], onHandIngredients = 'None',
-      calendarInsights = 'None', people = 4, name = 'Guest'
-    } = data;
+  duration = 7, startDay = 'Monday', meals = ['Supper'], dietType = 'Any', avoidIngredients = 'None',
+  mealStyle = 'Any', cookingRequests = 'None', appliances = [], onHandIngredients = 'None',
+  calendarInsights = 'None', people = 4, name = 'Guest'
+} = data;
 
-    const allergyWarning = dietaryPreferences.toLowerCase().includes('shellfish')
-      ? '⚠️ User may be allergic to shellfish. ABSOLUTELY DO NOT include shrimp, crab, lobster, clams, or shellfish of any kind.'
-      : '';
+const avoidBlock = avoidIngredients && avoidIngredients.trim().toLowerCase() !== 'none'
+  ? `ABSOLUTELY DO NOT include any of the following ingredients in any meals or recipes: ${avoidIngredients}. These are allergies or strictly avoided.`
+  : '';
 
-    const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}.
+const prompt = `You are a professional meal planner. Create a ${duration}-day meal plan that begins on ${startDay}. Only include the following meals each day: ${meals.join(', ')}.
 User Info:
 - Diet Type: ${dietType}
-- Preferences: ${dietaryPreferences}
 - Cooking Style: ${mealStyle}
 - Special Requests: ${cookingRequests}
 - Appliances: ${appliances.join(', ') || 'None'}
@@ -178,13 +177,14 @@ User Info:
 - Household size: ${people}
 - Calendar Insights: ${calendarInsights || 'None'}
 
-${allergyWarning}
+${avoidBlock}
 
 Instructions:
 - Use ${startDay} as the first day
-- Respect all dietary preferences
+- Do NOT include any avoid ingredients listed above
 - End with a shopping list grouped by category and subtract on-hand items
 - Include a JSON array of all meals with day, meal type, and title`;
+
 
     const mealPlanRes = await openai.chat.completions.create({
       model: 'gpt-4',
