@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Custom Meal Plan Generator</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="wrapper">
+  <div class="logo">
+    <img src="https://storage.googleapis.com/msgsndr/MLvzWRO6i3vfCdJZS4i6/media/6801a80310c9ded75f0b9908.png" alt="The Chaos to Confidence Collective Logo">
+  </div>
+  <h1>Get Your Custom Meal Plan</h1>
+  <form id="combinedForm">
+    <!-- form content is here -->
+  </form>
+
+  <div id="results" style="display: none;"></div>
+
+  <form id="feedbackForm" style="display: none;">
+    <label>Want something changed?
+      <textarea name="feedback" placeholder="e.g. fewer eggs, more warm meals" required></textarea>
+    </label>
+    <button type="submit">Update My Plan</button>
+  </form>
+
+  <button id="reviseButton" style="display: none;">Revise My Plan</button>
+  <button id="approveButton" style="display: none;">Yes, I Approve This Plan</button>
+
+  <div id="downloadLinks" style="display: none;"></div>
+
+  <script src="script.js"></script>
+  </main>
+</body>
+</html>
