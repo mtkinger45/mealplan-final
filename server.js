@@ -238,7 +238,7 @@ ${header}
 
   // First pass (more creative)
   const first = await openai.chat.completions.create({
-    model: 'gpt-4',
+    model: 'gpt-4.1',
     messages: [
       { role: 'system', content: 'You are a professional recipe writer.' },
       { role: 'user', content: prompt },
@@ -254,7 +254,7 @@ ${header}
     console.warn('[RECIPE HEADER MISMATCH] Retrying with stricter settings for:', header);
 
     const retry = await openai.chat.completions.create({
-      model: 'gpt-4',
+      model: 'gpt-4.1',
       messages: [
         { role: 'system', content: 'You are a professional recipe writer.' },
         {
@@ -349,7 +349,7 @@ ${MEAL_JSON_END}
 `;
 
     const mealPlanRes = await openai.chat.completions.create({
-      model: 'gpt-4',
+      model: 'gpt-4.1',
       messages: [
         { role: 'system', content: 'You are a professional meal planner.' },
         { role: 'user', content: prompt },
