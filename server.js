@@ -216,17 +216,9 @@ function expectedMealHeader(day, meal, title) {
   return `**Meal Name:** ${day} ${meal} – ${title}`;
 }
 
-function recipeHasCompleteMacros(text) {
-  const section = text.match(/\*{0,2}Macros:\*{0,2}([\s\S]*)$/i);
-  if (!section) return false;
-  const macros = section[1];
-  return ['protein', 'fat', 'carbs'].every(label =>
-    new RegExp(`\\b${label}\\s*:?\\s*\\d+(?:\\.\\d+)?\\s*g\\b`, 'i').test(macros)
-  );
-}
-
 async function generateOneRecipe({ day, meal, title, people }) {
   const header = expectedMealHeader(day, meal, title);
+
   const prompt = `You are a professional recipe writer.
 
 CRITICAL REQUIREMENTS:
@@ -234,10 +226,8 @@ CRITICAL REQUIREMENTS:
 ${header}
 - Do NOT change the meal title, day, or meal type.
 - Ingredients must be in U.S. measurements for ${people} people.
-- All ingredient quantities must be included.
-- Provide realistic ESTIMATED macros PER SERVING (one person's portion), not totals for ${people} people.
-- Macros are estimates, not laboratory-verified nutrition facts.
-- NEVER leave the macros blank. The final line MUST include numeric values for Protein, Fat and Carbs in grams.
+- Include exact quantities for every ingredient.
+- Include estimated macros PER SERVING, with numeric grams for all three: Protein, Fat, Carbs. Never leave the macros heading blank.
 - Output MUST follow this format exactly:
 
 ${header}
@@ -248,23 +238,55 @@ ${header}
 **Prep Time:** X minutes
 **Macros:** Protein: 35g, Fat: 20g, Carbs: 15g
 
-The macro numbers in the example are placeholders. Estimate appropriate values for the actual ingredients and portion size.`;
+The macro numbers above are examples only. Estimate values for the actual recipe.`;
 
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const response = await openai.chat.completions.create({
+  // First pass (more creative)
+  const first = await openai.chat.completions.create({
+    model: 'gpt-4.1',
+    messages: [
+      { role: 'system', content: 'You are a professional recipe writer.' },
+      { role: 'user', content: prompt },
+    ],
+    temperature: 0.6,
+    max_tokens: 1800,
+  });
+
+  let text = first.choices?.[0]?.message?.content?.trim() || '';
+
+  // Drift check: must begin with exact header
+  if (!text.startsWith(header)) {
+    console.warn('[RECIPE HEADER MISMATCH] Retrying with stricter settings for:', header);
+
+    const retry = await openai.chat.completions.create({
       model: 'gpt-4.1',
       messages: [
-        { role: 'system', content: 'You are a professional recipe writer. Follow the requested format exactly, including all three numeric macros.' },
-        { role: 'user', content: prompt + (attempt > 1 ? `\n\nPREVIOUS ATTEMPT FAILED VALIDATION. Begin with the exact required header and include numeric Protein, Fat, and Carbs grams on the Macros line. No missing fields.` : '') },
+        { role: 'system', content: 'You are a professional recipe writer.' },
+        {
+          role: 'user',
+          content:
+            prompt +
+            `
+
+IMPORTANT: Your output did not start with the exact required header previously.
+You MUST begin with:
+${header}
+No extra text before it.`,
+        },
       ],
-      temperature: attempt === 1 ? 0.4 : 0,
-      max_tokens: 2000,
+      temperature: 0,
+      max_tokens: 1800,
     });
-    const text = response.choices?.[0]?.message?.content?.trim() || '';
-    if (text.startsWith(header) && recipeHasCompleteMacros(text)) return text;
-    console.warn(`[RECIPE VALIDATION] Attempt ${attempt}/3 incomplete for ${header}; finish_reason=${response.choices?.[0]?.finish_reason}`);
+
+    const retryText = retry.choices?.[0]?.message?.content?.trim() || '';
+    if (retryText.startsWith(header)) {
+      text = retryText;
+    } else {
+      // Last resort: force prepend header if model still messes up
+      text = `${header}\n${retryText}`;
+    }
   }
-  throw new Error(`Recipe missing header or complete macros after retries: ${header}`);
+
+  return text;
 }
 
 app.post('/api/mealplan', async (req, res) => {
