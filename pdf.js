@@ -74,6 +74,10 @@ export async function createPdfFromText(text, options = {}) {
         } else if (/^\*\*Macros:\*\*/i.test(trimmed)) {
           doc.moveDown(0.3);
           bold('Macros:', 12);
+          // The AI often writes values on the SAME line as the heading.
+          // Preserve those values rather than discarding the entire line.
+          const macroValues = trimmed.replace(/^\*\*Macros:\*\*/i, '').replace(/\*\*/g, '').trim();
+          if (macroValues) regular(macroValues, 12);
         } else {
           regular(trimmed, 12);
         }
