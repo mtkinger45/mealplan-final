@@ -101,8 +101,15 @@ function normalizeIngredient(name) {
     .replace(/\b(?:for|to)\s+serv(?:e|ing)\b.*$/i, ' ')
     .replace(/\b(?:into|in)\s+(?:\d+|one|half)[-\s]*inch\b.*$/i, ' ')
     .replace(/\b(?:for serving|for garnish|for topping|for cooking|to taste|as needed)\b.*$/i, ' ')
-    .replace(/\b(?:fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|coarsely|finely|halved|juiced|zested|drained|shredded|grated|boneless|bone-in|skinless|low-sodium|lowfat|cubed|peeled|raw|unsalted|pure|dried|ground|wedges|chunks|pieces|rounds)\b/g, ' ')
+    .replace(/\b(?:fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|coarsely|finely|halved|juiced|zested|drained|shredded|grated|boneless|bone-in|skinless|low-sodium|lowfat|cubed|peeled|raw|unsalted|pure|dried|ground|wedges|chunks|pieces|rounds|divided)\b/g, ' ')
     .replace(/[^a-z\s-]/g, ' ').replace(/\bof\b/g,' ').replace(/\s+/g,' ').trim();
+  // Some recipe responses put a unit into the ingredient name instead of
+  // separating it into the quantity field. Remove the unit from the name,
+  // but never invent an amount for it.
+  n = n.replace(/^(?:cups?|tablespoons?|teaspoons?|tbsps?|tsps?)\s+/, '');
+  if (/^(?:black|white)\s+pepper$/.test(n)) return n;
+  if (/^chicken\s+(?:stock|broth)$/.test(n)) return 'chicken broth';
+  if (/^(?:low sodium\s+)?beef\s+(?:stock|broth)$/.test(n)) return 'beef broth';
   // Preserve meaningful varieties, while merging prep descriptions and plurals.
   if (/\b(?:red|yellow|green|orange)\s+bell\s+peppers?\b/.test(n))
     return n.match(/\b(red|yellow|green|orange)\s+bell\s+peppers?\b/)[1] + ' bell pepper';
@@ -165,13 +172,16 @@ function parseStructuredIngredients(text) {
           const unitWord = (bareSalt[1] || '').toLowerCase();
           if (/^(teaspoon|tablespoon|tsp|tbsp)$/.test(unitWord)) {
             const unit = normalizeUnit(unitWord);
-            items.push({name:'salt',unit,qty:unitConversion[unitWord]?.factor || 1});
+            items.push({name:'salt',unit:'unspecified',qty:1});
           } else {
             items.push({name:'salt',unit:'unspecified',qty:1});
           }
           continue;
         }
-        items.push({name:normalizeIngredient(clean),unit:'count',qty:1});
+        // No numeric amount: do not silently turn 'cup chicken broth' or
+        // 'teaspoon black pepper' into one whole item.
+        const missingQtyName = clean.replace(/^(?:cups?|tablespoons?|teaspoons?|tbsps?|tsps?)\s+/i, '');
+        items.push({name:normalizeIngredient(missingQtyName),unit:'unspecified',qty:1});
         continue;
       }
       const qty = parseQuantity(m[1]);
@@ -209,6 +219,8 @@ function shoppingAmount(qty, unit) {
 function categorizeIngredient(name) {
   const i = name.toLowerCase();
   if (/lemon|lime|avocado/.test(i)) return 'Produce';
+  if (/^(?:black|white) pepper$/.test(i)) return 'Pantry';
+  if (/^(?:chicken|beef) broth$/.test(i)) return 'Pantry';
   if (/beef|ribeye|sirloin|steak|chuck|ground/.test(i)) return 'Meat';
   if (/chicken|thigh|breast|drumstick/.test(i)) return 'Meat';
   if (/pork|bacon|ham|sausage/.test(i)) return 'Meat';
@@ -221,7 +233,7 @@ function categorizeIngredient(name) {
     )
   )
     return 'Produce';
-  if (/butter|ghee|oil|vinegar|sugar|vanilla|salt|thyme|paprika|oregano/.test(i)) return 'Pantry';
+  if (/butter|ghee|oil|vinegar|sugar|vanilla|salt|thyme|paprika|oregano|black pepper|white pepper|chicken broth|beef broth/.test(i)) return 'Pantry';
   return 'Other';
 }
 
