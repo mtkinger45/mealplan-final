@@ -111,7 +111,7 @@ function normalizeIngredient(name) {
   if (/\b(?:yellow|white|sweet)\s+onions?\b/.test(n)) return n.match(/\b(yellow|white|sweet)\s+onions?\b/)[1] + ' onion';
   if (/\b(?:garlic\s+cloves?|cloves?\s+garlic|garlic)\b/.test(n) && !/powder|salt/.test(n)) return 'garlic';
   if (/\bvanilla\s+extract\b/.test(n)) return 'vanilla extract';
-  if (/\b(?:kosher|sea|table)\s+salt\b/.test(n) || n === 'salt') return 'salt';
+  if (/^(?:(?:kosher|sea|table|fine|coarse|iodized)\s+)?salt$/.test(n) || /^(?:teaspoons?|tablespoons?|tsp|tbsp)\s+(?:(?:kosher|sea|table)\s+)?salt$/.test(n)) return 'salt';
   if (/\bgreek\s+yogurt\b/.test(n)) return 'greek yogurt';
   if (/\bgluten[- ]free\s+granola\b/.test(n)) return 'gluten-free granola';
   if (/\b(?:smoked\s+)?paprika\b/.test(n)) return 'paprika';
@@ -156,7 +156,24 @@ function parseStructuredIngredients(text) {
       const clean = line.replace(/^\s*[-•]\s*/, '').trim();
       if (!clean || /^(?:salt|pepper)\s+(?:and\s+pepper\s+)?to taste/i.test(clean)) continue;
       const m = clean.match(/^(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)\s*(?:-\s*)?([a-zA-Z-]+)?\s*(.*)$/);
-      if (!m) { items.push({name:normalizeIngredient(clean),unit:'count',qty:1}); continue; }
+      if (!m) {
+        // Some AI responses omit the number but leave a measurement word,
+        // e.g. 'teaspoon salt' or 'teaspoons salt'. Never treat these as
+        // separate ingredients or invent a numeric amount.
+        const bareSalt = clean.match(/^(?:(teaspoons?|tablespoons?|tsp|tbsp)\s+)?(?:(?:kosher|sea|table|fine|coarse|iodized)\s+)?salt$/i);
+        if (bareSalt) {
+          const unitWord = (bareSalt[1] || '').toLowerCase();
+          if (/^(teaspoon|tablespoon|tsp|tbsp)$/.test(unitWord)) {
+            const unit = normalizeUnit(unitWord);
+            items.push({name:'salt',unit,qty:unitConversion[unitWord]?.factor || 1});
+          } else {
+            items.push({name:'salt',unit:'unspecified',qty:1});
+          }
+          continue;
+        }
+        items.push({name:normalizeIngredient(clean),unit:'count',qty:1});
+        continue;
+      }
       const qty = parseQuantity(m[1]);
       let unit = (m[2] || '').toLowerCase();
       let name = m[3] || '';
@@ -441,9 +458,12 @@ ${MEAL_JSON_END}
     Object.entries(byName).forEach(([name, amounts]) => {
       const cat = categorizeIngredient(name);
       if (!categorized[cat]) categorized[cat] = [];
-      const formatted = amounts.sort((a,b)=>a.unit.localeCompare(b.unit))
+      const known = amounts.filter(a=>a.unit !== 'unspecified');
+      const unknown = amounts.some(a=>a.unit === 'unspecified');
+      const formatted = known.sort((a,b)=>a.unit.localeCompare(b.unit))
         .map(({qty,unit}) => shoppingAmount(qty,unit)).join(' + ');
-      categorized[cat].push(`${capitalize(name)}: ${formatted}`);
+      const note = unknown ? (formatted ? ' (plus amount unspecified in recipe)' : 'amount unspecified in recipe') : '';
+      categorized[cat].push(`${capitalize(name)}: ${formatted}${note}`);
     });
 
     let rebuiltShoppingList = '';
