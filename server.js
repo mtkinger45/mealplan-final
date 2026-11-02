@@ -74,100 +74,106 @@ function safeJsonParseMeals(jsonText) {
 // ----------------------------
 // Units + ingredient parsing
 // ----------------------------
+// Shopping list: retain practical units and aggregate equivalent ingredients.
 const unitConversion = {
-  tbsp: { to: 'cups', factor: 1 / 16 },
-  tsp: { to: 'cups', factor: 1 / 48 },
-  oz: { to: 'cups', factor: 1 / 8 },
-  cups: { to: 'cups', factor: 1 },
-  cloves: { to: 'clove', factor: 1 },
-  pounds: { to: 'lb', factor: 1 },
-  lbs: { to: 'lb', factor: 1 },
-  cup: { to: 'cups', factor: 1 },
-  tablespoons: { to: 'tbsp', factor: 1 },
-  teaspoons: { to: 'tsp', factor: 1 },
+  tsp: { to: 'tsp', factor: 1 }, teaspoon: { to: 'tsp', factor: 1 }, teaspoons: { to: 'tsp', factor: 1 },
+  tbsp: { to: 'tsp', factor: 3 }, tablespoon: { to: 'tsp', factor: 3 }, tablespoons: { to: 'tsp', factor: 3 },
+  cup: { to: 'tsp', factor: 48 }, cups: { to: 'tsp', factor: 48 },
+  lb: { to: 'lb', factor: 1 }, lbs: { to: 'lb', factor: 1 }, pound: { to: 'lb', factor: 1 }, pounds: { to: 'lb', factor: 1 },
+  oz: { to: 'lb', factor: 1/16 }, ounce: { to: 'lb', factor: 1/16 }, ounces: { to: 'lb', factor: 1/16 },
+  g: { to: 'g', factor: 1 }, grams: { to: 'g', factor: 1 },
+  clove: { to: 'clove', factor: 1 }, cloves: { to: 'clove', factor: 1 },
+  slice: { to: 'slice', factor: 1 }, slices: { to: 'slice', factor: 1 },
+  can: { to: 'can', factor: 1 }, cans: { to: 'can', factor: 1 },
+  package: { to: 'package', factor: 1 }, packages: { to: 'package', factor: 1 },
+  scoop: { to: 'scoop', factor: 1 }, scoops: { to: 'scoop', factor: 1 },
+  whole: { to: 'count', factor: 1 }, large: { to: 'count', factor: 1 }, medium: { to: 'count', factor: 1 }, small: { to: 'count', factor: 1 },
 };
-
 function normalizeUnit(unit = '') {
-  const u = unit.toLowerCase();
-  return unitConversion[u]?.to || u;
+  const u = String(unit).toLowerCase().replace(/\.$/, '');
+  return unitConversion[u]?.to || (u || 'count');
 }
-
-function overrideUnitForIngredient(name, originalUnit) {
-  if (name === 'ribeye steak') return 'lb';
-  if (name === 'chicken breasts') return 'lb';
-  if (name === 'shrimp') return 'lb';
-  return normalizeUnit(originalUnit);
-}
-
 function normalizeIngredient(name) {
-  const cleaned = name
-    .toLowerCase()
-    .replace(/\(.*?\)/g, '')
-    .replace(
-      /\b(fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|to taste|as needed|coarsely|finely|halved|juiced|zest(ed)?|drained|shredded|grated|boneless|bonein|skinless|low-sodium|lowfat|cubed|peeled|cut into.*|for garnish(?:ing)?|approximately.*|deveined|raw)\b/gi,
-      ''
-    )
-    .replace(/[^a-zA-Z\s]/g, '')
-    .replace(/\bof\b/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  return cleaned
-    .replace(/extra virgin olive oil|olive oil.*/g, 'olive oil')
-    .replace(/butter.*/, 'butter')
-    .replace(/unsalted butter/, 'butter')
-    .replace(/melted butter/, 'butter')
-    .replace(/garlic.*/, 'garlic')
-    .replace(/parsley.*/, 'parsley')
-    .replace(/soy sauce.*/, 'soy sauce')
-    .replace(/apple cider vinegar.*/, 'apple cider vinegar')
-    .replace(/black pepper.*/, 'black pepper')
-    .replace(/bell pepper.*/, 'bell pepper')
-    .replace(/green onion.*/, 'green onion')
-    .replace(/scallion.*/, 'green onion')
-    .replace(/ribeye.*|lean beef.*|steaks.*|steak.*/g, 'ribeye steak')
-    .replace(/fish fillet.*/g, 'fish fillets')
-    .replace(/salmon.*/, 'fish')
-    .replace(/white fish.*/, 'fish')
-    .replace(/shrimp.*/, 'shrimp')
-    .replace(/carrots.*/, 'carrots')
-    .replace(/lemon juice|lemon slices and herbs|lemons? zested and.*|lemons?|lemon.*/g, 'lemon')
-    .replace(/limes?|lime juice.*/g, 'lime')
-    .replace(/chicken breast.*/g, 'chicken breasts')
-    .replace(/chickens?.*/, 'chicken');
+  let n = String(name).toLowerCase().replace(/\([^)]*\)/g, ' ')
+    .replace(/\b(fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|to taste|as needed|coarsely|finely|halved|juiced|zested|drained|shredded|grated|boneless|bone-in|skinless|low-sodium|lowfat|cubed|peeled|raw|unsalted|pure|dried|ground)\b/g, ' ')
+    .replace(/[^a-z\s-]/g, ' ').replace(/\bof\b/g,' ').replace(/\s+/g,' ').trim();
+  const aliases = [
+    [/^(?:pure )?vanilla extract.*$/, 'vanilla extract'],
+    [/^garlic (?:clove|cloves)$/, 'garlic'],
+    [/^garlic$/, 'garlic'],
+    [/^kosher salt$|^sea salt$|^salt$/, 'salt'],
+    [/^smoked paprika$|^paprika$/, 'paprika'],
+    [/^dried thyme$|^thyme$/, 'thyme'],
+    [/^olive oil.*$/, 'olive oil'],
+    [/^(?:plain )?(?:nonfat )?greek yogurt.*$/, 'greek yogurt'],
+    [/^gluten[- ]free granola.*$/, 'gluten-free granola'],
+    [/^butter.*$/, 'butter'],
+    [/^bell peppers?$/, 'bell pepper'],
+    [/^onions?$/, 'onion'],
+    [/^tomatoes$/, 'tomato'],
+    [/^carrots$/, 'carrot'],
+    [/^eggs?$/, 'eggs'],
+    [/^chicken breasts?$/, 'chicken breast'],
+    [/^salmon fillets?$/, 'salmon'],
+  ];
+  for (const [pattern, replacement] of aliases) if (pattern.test(n)) return replacement;
+  return n;
 }
-
+function parseQuantity(value) {
+  const v = value.trim();
+  if (/^\d+\s+\d+\/\d+$/.test(v)) {
+    const [whole, fraction] = v.split(/\s+/);
+    const [num, den] = fraction.split('/').map(Number);
+    return Number(whole) + num / den;
+  }
+  if (/^\d+\/\d+$/.test(v)) {
+    const [num, den] = v.split('/').map(Number);
+    return num / den;
+  }
+  return Number(v);
+}
 function parseStructuredIngredients(text) {
-  const matches =
-    text.match(/\*\*Ingredients:\*\*[\s\S]*?(?=\*\*Instructions:|\*\*Prep Time|---|$)/g) || [];
-
+  const matches = text.match(/\*\*Ingredients:\*\*[\s\S]*?(?=\*\*Instructions:|\*\*Prep Time|---|$)/g) || [];
   const items = [];
   for (const block of matches) {
-    const lines = block.split('\n').slice(1);
-    for (const line of lines) {
-      const clean = line.replace(/^[-•]\s*/, '').trim();
-      if (!clean || /to taste|optional/i.test(clean)) continue;
-
-      // qty unit name (simple parse)
-      const match = clean.match(/(\d+(?:\.\d+)?)(?:\s+)?([a-zA-Z]+)?\s+(.+)/);
-      if (match) {
-        const [, qty, unit, name] = match;
-        items.push({
-          name: normalizeIngredient(name),
-          unit: normalizeUnit(unit),
-          qty: parseFloat(qty),
-        });
-      } else {
-        items.push({ name: normalizeIngredient(clean), unit: '', qty: 1 });
-      }
+    for (const line of block.split('\n').slice(1)) {
+      const clean = line.replace(/^\s*[-•]\s*/, '').trim();
+      if (!clean || /^(?:salt|pepper)\s+(?:and\s+pepper\s+)?to taste/i.test(clean)) continue;
+      const m = clean.match(/^(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)\s*(?:-\s*)?([a-zA-Z-]+)?\s*(.*)$/);
+      if (!m) { items.push({name:normalizeIngredient(clean),unit:'count',qty:1}); continue; }
+      const qty = parseQuantity(m[1]);
+      let unit = (m[2] || '').toLowerCase();
+      let name = m[3] || '';
+      if (unit && !unitConversion[unit]) { name = unit + ' ' + name; unit = 'count'; }
+      if (!name.trim()) continue;
+      // Ingredient names such as 'cloves garlic' are correctly parsed as a unit.
+      items.push({name:normalizeIngredient(name),unit:normalizeUnit(unit),qty:qty * (unitConversion[unit]?.factor || 1)});
     }
   }
   return items;
 }
-
+function shoppingAmount(qty, unit) {
+  const fractions = [[0.125,'1/8'],[0.25,'1/4'],[0.333333,'1/3'],[0.5,'1/2'],[0.666667,'2/3'],[0.75,'3/4'],[0.875,'7/8']];
+  function pretty(n) {
+    const whole = Math.floor(n + 1e-7);
+    const frac = n - whole;
+    if (frac < 0.04) return String(whole);
+    const best = fractions.reduce((a,b)=>Math.abs(b[0]-frac)<Math.abs(a[0]-frac)?b:a);
+    if (Math.abs(best[0]-frac)<0.045) return (whole ? whole+' ' : '')+best[1];
+    return String(Math.round(n*10)/10);
+  }
+  if (unit === 'tsp') {
+    if (qty >= 48) return pretty(qty/48) + ' cups';
+    if (qty >= 3) return pretty(qty/3) + ' tbsp';
+    return pretty(qty) + ' tsp';
+  }
+  if (unit === 'lb') return qty < 1 ? pretty(qty*16) + ' oz' : pretty(qty) + ' lb';
+  if (unit === 'count') return pretty(qty);
+  return pretty(qty) + ' ' + (unit === 'clove' && qty !== 1 ? 'cloves' : unit === 'slice' && qty !== 1 ? 'slices' : unit);
+}
 function categorizeIngredient(name) {
   const i = name.toLowerCase();
-  if (/lemon|lime|avocado|olive/.test(i)) return 'Fruit';
+  if (/lemon|lime|avocado/.test(i)) return 'Produce';
   if (/beef|ribeye|sirloin|steak|chuck|ground/.test(i)) return 'Meat';
   if (/chicken|thigh|breast|drumstick/.test(i)) return 'Meat';
   if (/pork|bacon|ham|sausage/.test(i)) return 'Meat';
@@ -180,7 +186,7 @@ function categorizeIngredient(name) {
     )
   )
     return 'Produce';
-  if (/butter|ghee|oil|vinegar|sugar/.test(i)) return 'Pantry';
+  if (/butter|ghee|oil|vinegar|sugar|vanilla|salt|thyme|paprika|oregano/.test(i)) return 'Pantry';
   return 'Other';
 }
 
@@ -387,37 +393,34 @@ ${MEAL_JSON_END}
     const aggregated = {};
 
     for (const { name, qty, unit } of structuredIngredients) {
-      if (!name || isNaN(qty)) continue;
-      const normName = normalizeIngredient(name);
-      const baseUnit = overrideUnitForIngredient(normName, unit);
-      const key = `${normName}|${baseUnit}`;
-
-      const factor = unitConversion[unit?.toLowerCase()]?.factor || 1;
-      const convertedQty = qty * factor;
-
-      if (!aggregated[key]) aggregated[key] = { name: normName, qty: 0, unit: baseUnit };
-      aggregated[key].qty += convertedQty;
+      if (!name || !Number.isFinite(qty) || qty <= 0) continue;
+      const key = `${name}|${unit}`;
+      if (!aggregated[key]) aggregated[key] = { name, qty: 0, unit };
+      aggregated[key].qty += qty;
     }
 
+    // Only subtract on-hand amounts when a matching measurement is unambiguous.
+    // Retain the original behavior for count-based entries.
     const onHandLines = onHandIngredients?.toLowerCase().split(/\n|,/) || [];
     const onHandMap = buildOnHandMap(onHandLines);
-    adjustForOnHand(aggregated, onHandMap);
+    for (const item of Object.values(aggregated)) {
+      if (item.unit === 'count' && onHandMap[item.name]) {
+        item.qty = Math.max(0, item.qty - onHandMap[item.name]);
+      }
+    }
 
     const categorized = {};
     Object.values(aggregated).forEach(({ name, qty, unit }) => {
+      if (qty <= 0) return;
       const cat = categorizeIngredient(name);
       if (!categorized[cat]) categorized[cat] = [];
-      const label = `${capitalize(name)}: ${qty} ${unit}`;
-      categorized[cat].push(label);
+      categorized[cat].push(`${capitalize(name)}: ${shoppingAmount(qty, unit)}`);
     });
 
     let rebuiltShoppingList = '';
     for (const category of Object.keys(categorized).sort()) {
       rebuiltShoppingList += `\n${category}:\n`;
-      const sortedItems = categorized[category]
-        .slice()
-        .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-      for (const item of sortedItems) {
+      for (const item of categorized[category].sort((a,b)=>a.localeCompare(b))) {
         rebuiltShoppingList += `• ${item}\n`;
       }
     }
