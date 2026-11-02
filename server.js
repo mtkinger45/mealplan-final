@@ -94,26 +94,35 @@ function normalizeUnit(unit = '') {
   return unitConversion[u]?.to || (u || 'count');
 }
 function normalizeIngredient(name) {
-  let n = String(name).toLowerCase().replace(/\([^)]*\)/g, ' ')
-    .replace(/\b(fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|to taste|as needed|coarsely|finely|halved|juiced|zested|drained|shredded|grated|boneless|bone-in|skinless|low-sodium|lowfat|cubed|peeled|raw|unsalted|pure|dried|ground)\b/g, ' ')
+  let n = String(name).toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\bcut\s+into\b.*$/i, ' ')
+    .replace(/\b(?:into|in)\s+(?:\d+|one|half)[-\s]*inch\b.*$/i, ' ')
+    .replace(/\b(?:for serving|for garnish|for topping|for cooking|to taste|as needed)\b.*$/i, ' ')
+    .replace(/\b(?:fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|coarsely|finely|halved|juiced|zested|drained|shredded|grated|boneless|bone-in|skinless|low-sodium|lowfat|cubed|peeled|raw|unsalted|pure|dried|ground|wedges|chunks|pieces|rounds)\b/g, ' ')
     .replace(/[^a-z\s-]/g, ' ').replace(/\bof\b/g,' ').replace(/\s+/g,' ').trim();
+  // Preserve meaningful varieties, while merging prep descriptions and plurals.
+  if (/\b(?:red|yellow|green|orange)\s+bell\s+peppers?\b/.test(n))
+    return n.match(/\b(red|yellow|green|orange)\s+bell\s+peppers?\b/)[1] + ' bell pepper';
+  if (/\bbell\s+peppers?\b/.test(n)) return 'bell pepper';
+  if (/\bred\s+onions?\b/.test(n)) return 'red onion';
+  if (/\b(?:yellow|white|sweet)\s+onions?\b/.test(n)) return n.match(/\b(yellow|white|sweet)\s+onions?\b/)[1] + ' onion';
+  if (/\b(?:garlic\s+cloves?|cloves?\s+garlic|garlic)\b/.test(n) && !/powder|salt/.test(n)) return 'garlic';
+  if (/\bvanilla\s+extract\b/.test(n)) return 'vanilla extract';
+  if (/\b(?:kosher|sea|table)\s+salt\b/.test(n) || n === 'salt') return 'salt';
+  if (/\bgreek\s+yogurt\b/.test(n)) return 'greek yogurt';
+  if (/\bgluten[- ]free\s+granola\b/.test(n)) return 'gluten-free granola';
+  if (/\b(?:smoked\s+)?paprika\b/.test(n)) return 'paprika';
+  if (/\bthyme\b/.test(n)) return 'thyme';
+  if (/\bolive\s+oil\b/.test(n)) return 'olive oil';
+  if (/\b(?:lemons?|limes?|zucchinis?|avocados?)\b/.test(n) && !/juice|zest/.test(n)) {
+    const m=n.match(/\b(lemons?|limes?|zucchinis?|avocados?)\b/)[1];
+    return ({lemons:'lemon',limes:'lime',zucchinis:'zucchini',avocados:'avocado'})[m] || m;
+  }
   const aliases = [
-    [/^(?:pure )?vanilla extract.*$/, 'vanilla extract'],
-    [/^garlic (?:clove|cloves)$/, 'garlic'],
-    [/^garlic$/, 'garlic'],
-    [/^kosher salt$|^sea salt$|^salt$/, 'salt'],
-    [/^smoked paprika$|^paprika$/, 'paprika'],
-    [/^dried thyme$|^thyme$/, 'thyme'],
-    [/^olive oil.*$/, 'olive oil'],
-    [/^(?:plain )?(?:nonfat )?greek yogurt.*$/, 'greek yogurt'],
-    [/^gluten[- ]free granola.*$/, 'gluten-free granola'],
-    [/^butter.*$/, 'butter'],
-    [/^bell peppers?$/, 'bell pepper'],
-    [/^onions?$/, 'onion'],
-    [/^tomatoes$/, 'tomato'],
-    [/^carrots$/, 'carrot'],
-    [/^eggs?$/, 'eggs'],
-    [/^chicken breasts?$/, 'chicken breast'],
+    [/^butter.*$/, 'butter'], [/^onions?$/, 'onion'],
+    [/^tomatoes$/, 'tomato'], [/^carrots$/, 'carrot'],
+    [/^eggs?$/, 'eggs'], [/^chicken breasts?$/, 'chicken breast'],
     [/^salmon fillets?$/, 'salmon'],
   ];
   for (const [pattern, replacement] of aliases) if (pattern.test(n)) return replacement;
@@ -409,12 +418,21 @@ ${MEAL_JSON_END}
       }
     }
 
-    const categorized = {};
+    // One shopping-list row per normalized ingredient. Never add unlike units
+    // (for example, 2 garlic cloves and 1 tbsp minced garlic).
+    const byName = {};
     Object.values(aggregated).forEach(({ name, qty, unit }) => {
       if (qty <= 0) return;
+      if (!byName[name]) byName[name] = [];
+      byName[name].push({ qty, unit });
+    });
+    const categorized = {};
+    Object.entries(byName).forEach(([name, amounts]) => {
       const cat = categorizeIngredient(name);
       if (!categorized[cat]) categorized[cat] = [];
-      categorized[cat].push(`${capitalize(name)}: ${shoppingAmount(qty, unit)}`);
+      const formatted = amounts.sort((a,b)=>a.unit.localeCompare(b.unit))
+        .map(({qty,unit}) => shoppingAmount(qty,unit)).join(' + ');
+      categorized[cat].push(`${capitalize(name)}: ${formatted}`);
     });
 
     let rebuiltShoppingList = '';
