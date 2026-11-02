@@ -87,7 +87,7 @@ const unitConversion = {
   can: { to: 'can', factor: 1 }, cans: { to: 'can', factor: 1 },
   package: { to: 'package', factor: 1 }, packages: { to: 'package', factor: 1 },
   scoop: { to: 'scoop', factor: 1 }, scoops: { to: 'scoop', factor: 1 },
-  whole: { to: 'count', factor: 1 }, large: { to: 'count', factor: 1 }, medium: { to: 'count', factor: 1 }, small: { to: 'count', factor: 1 },
+  head: { to: 'count', factor: 1 }, heads: { to: 'count', factor: 1 }, bunch: { to: 'count', factor: 1 }, bunches: { to: 'count', factor: 1 }, piece: { to: 'count', factor: 1 }, pieces: { to: 'count', factor: 1 }, whole: { to: 'count', factor: 1 }, large: { to: 'count', factor: 1 }, medium: { to: 'count', factor: 1 }, small: { to: 'count', factor: 1 },
 };
 function normalizeUnit(unit = '') {
   const u = String(unit).toLowerCase().replace(/\.$/, '');
@@ -97,6 +97,8 @@ function normalizeIngredient(name) {
   let n = String(name).toLowerCase()
     .replace(/\([^)]*\)/g, ' ')
     .replace(/\bcut\s+into\b.*$/i, ' ')
+    .replace(/\b(?:into|cut|sliced|chopped|diced)\s+[-\w\s]*?(?:pieces|wedges|chunks|rounds)\b.*$/i, ' ')
+    .replace(/\b(?:for|to)\s+serv(?:e|ing)\b.*$/i, ' ')
     .replace(/\b(?:into|in)\s+(?:\d+|one|half)[-\s]*inch\b.*$/i, ' ')
     .replace(/\b(?:for serving|for garnish|for topping|for cooking|to taste|as needed)\b.*$/i, ' ')
     .replace(/\b(?:fresh|large|medium|small|chopped|diced|minced|sliced|thinly|thickly|trimmed|optional|coarsely|finely|halved|juiced|zested|drained|shredded|grated|boneless|bone-in|skinless|low-sodium|lowfat|cubed|peeled|raw|unsalted|pure|dried|ground|wedges|chunks|pieces|rounds)\b/g, ' ')
@@ -119,6 +121,11 @@ function normalizeIngredient(name) {
     const m=n.match(/\b(lemons?|limes?|zucchinis?|avocados?)\b/)[1];
     return ({lemons:'lemon',limes:'lime',zucchinis:'zucchini',avocados:'avocado'})[m] || m;
   }
+  if (/\b(?:butter\s+lettuce|lettuce\s+butter)\b/.test(n)) return 'butter lettuce';
+  if (/\bcauliflower\b/.test(n)) return 'cauliflower';
+  if (/\bred\s+onion\b/.test(n)) return 'red onion';
+  if (/\b(?:red|yellow|green|orange)\s+bell\s+pepper\b/.test(n)) return n.match(/\b(red|yellow|green|orange)\s+bell\s+pepper\b/)[1] + ' bell pepper';
+  if (/\bzucchini\b/.test(n)) return 'zucchini';
   const aliases = [
     [/^butter.*$/, 'butter'], [/^onions?$/, 'onion'],
     [/^tomatoes$/, 'tomato'], [/^carrots$/, 'carrot'],
@@ -154,6 +161,7 @@ function parseStructuredIngredients(text) {
       let unit = (m[2] || '').toLowerCase();
       let name = m[3] || '';
       if (unit && !unitConversion[unit]) { name = unit + ' ' + name; unit = 'count'; }
+      name = name.replace(/\b(?:cut into|sliced into|chopped into)\b.*$/i, '').trim();
       if (!name.trim()) continue;
       // Ingredient names such as 'cloves garlic' are correctly parsed as a unit.
       items.push({name:normalizeIngredient(name),unit:normalizeUnit(unit),qty:qty * (unitConversion[unit]?.factor || 1)});
@@ -172,12 +180,13 @@ function shoppingAmount(qty, unit) {
     return String(Math.round(n*10)/10);
   }
   if (unit === 'tsp') {
-    if (qty >= 48) return pretty(qty/48) + ' cups';
+    if (qty >= 48) { const cups=qty/48; return pretty(cups) + (Math.abs(cups-1)<0.001 ? ' cup' : ' cups'); }
     if (qty >= 3) return pretty(qty/3) + ' tbsp';
     return pretty(qty) + ' tsp';
   }
   if (unit === 'lb') return qty < 1 ? pretty(qty*16) + ' oz' : pretty(qty) + ' lb';
   if (unit === 'count') return pretty(qty);
+  if (unit === 'clove') return pretty(qty) + (Math.abs(qty-1)<0.001 ? ' clove' : ' cloves');
   return pretty(qty) + ' ' + (unit === 'clove' && qty !== 1 ? 'cloves' : unit === 'slice' && qty !== 1 ? 'slices' : unit);
 }
 function categorizeIngredient(name) {
@@ -426,6 +435,8 @@ ${MEAL_JSON_END}
       if (!byName[name]) byName[name] = [];
       byName[name].push({ qty, unit });
     });
+    // Consolidate aliases to one shopping row. Different units remain separate
+    // rather than making unsafe volume-to-whole-vegetable conversions.
     const categorized = {};
     Object.entries(byName).forEach(([name, amounts]) => {
       const cat = categorizeIngredient(name);
